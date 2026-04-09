@@ -1,0 +1,24 @@
+# Build output
+/build/
+/out/
+
+# CMake generated files
+/CMakeCache.txt
+/CMakeFiles/
+/cmake_install.cmake
+/compile_commands.json
+/Makefile
+
+# IDE files
+/.vs/
+/.vscode/
+
+# Local database files
+*.db
+
+# MSVC intermediate files
+*.obj
+*.pdb
+*.ilk
+*.lib
+*.exp
