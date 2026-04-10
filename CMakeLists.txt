@@ -9,6 +9,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_library(db_storage
     src/storage/disk/disk_manager.cpp
     src/storage/heap/heap_file.cpp
+    src/storage/page/slotted_page.cpp
 )
 
 target_include_directories(db_storage
@@ -21,6 +22,24 @@ add_executable(DatabaseEngine
 )
 
 target_link_libraries(DatabaseEngine
+    PRIVATE
+        db_storage
+)
+
+add_executable(SlottedPageTest
+    tests/slotted_page_test.cpp
+)
+
+target_link_libraries(SlottedPageTest
+    PRIVATE
+        db_storage
+)
+
+add_executable(SlottedPageFullTest
+    tests/slotted_page_full_test.cpp
+)
+
+target_link_libraries(SlottedPageFullTest
     PRIVATE
         db_storage
 )

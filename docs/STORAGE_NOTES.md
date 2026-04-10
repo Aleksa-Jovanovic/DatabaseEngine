@@ -56,13 +56,58 @@ offset = page_id * PAGE_SIZE
 - no deletes
 - no updates
 - no variable-size records
-- no slot directory
-- no free space pointer
 - no checksums
 - no page type field yet
 
+## Slotted page layout
+Phase 3 now has a first slotted page implementation.
+
+Current slotted page shape:
+
+| SlottedPageHeader | SlotEntry[] | Free space | Record bytes |
+
+Current layout behavior:
+- slots grow from the front of the page toward higher offsets
+- record bytes grow from the back of the page toward lower offsets
+- free space stays between the slot directory and the record bytes
+
+### SlottedPageHeader
+Current fields:
+- `slot_count`
+- `free_space_start`
+- `free_space_end`
+
+### SlotEntry
+Current fields:
+- `offset`
+- `length`
+
+### Free space convention
+- free space is the byte range `[free_space_start, free_space_end)`
+
+### Current slotted page behavior
+- `SlottedPage::initialize()` creates an empty slotted page
+- `insert_record()` inserts one fixed-size `Record` if enough space remains
+- `record_at(slot_index)` reads a record through the slot directory
+- `free_space()` returns the currently available free bytes in the page
+
+### Current scope of Phase 3
+The slotted page implementation currently exists as a page-level abstraction.
+
+What is working now:
+- page initialization
+- slot directory management
+- fixed-size record insertion into the page
+- slot-based record lookup inside the page
+- isolated tests for basic insert/read behavior
+- isolated test for full-page behavior
+
+What is not migrated yet:
+- `HeapFile` still uses the earlier contiguous record layout
+
 ## Next likely storage upgrade
-After basic version works:
-- add page type
-- add free space tracking
-- move toward slotted pages
+After the current slotted page abstraction:
+- migrate `HeapFile` to use `SlottedPage`
+- keep full scan lookup working through slots
+- later add deletion handling
+- later move toward variable-length records
