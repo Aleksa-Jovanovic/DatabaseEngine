@@ -8,7 +8,7 @@ Start with the smallest useful storage engine:
 - sequential scan lookup
 
 ## First page format
-Initial page layout:
+Initial Phase 2 page layout:
 
 | PageHeader | Record[] | Free space |
 
@@ -41,19 +41,16 @@ offset = page_id * PAGE_SIZE
 - `read_page(page_id, out_data)` reads exactly one full page from offset `page_id * PAGE_SIZE`
 - if `read_page` is called for a page id beyond the current page count, it returns a zero-filled page buffer
 
-## Insert strategy - first version
-- if file has no pages, allocate first page
-- read last page
-- if there is space, append record
-- if full, allocate new page and append there
-
-## Read / find strategy - first version
-- scan all pages in order
-- scan all records inside each page
-- return first matching key
+## Current heap file behavior
+- if the file has no pages yet, allocate the first page
+- initialize a new page as a slotted page before first insert
+- read the last page and try to append through `SlottedPage`
+- if the last page is full, allocate a new page and insert there
+- `find(key)` scans all pages in order
+- each page scan walks through slot entries and reads records through the slot directory
+- data remains persisted in a page-based disk file through `DiskManager`
 
 ## Current simplifications
-- no deletes
 - no updates
 - no variable-size records
 - no checksums
@@ -88,11 +85,20 @@ Current fields:
 ### Current slotted page behavior
 - `SlottedPage::initialize()` creates an empty slotted page
 - `insert_record()` inserts one fixed-size `Record` if enough space remains
+- `delete_record(slot_index)` performs logical deletion by invalidating the slot length
 - `record_at(slot_index)` reads a record through the slot directory
+- deleted slots are treated as unreadable
 - `free_space()` returns the currently available free bytes in the page
 
+### Current deletion behavior
+- deletion is logical, not physical
+- deleting a slot does not remove the slot entry
+- deleting a slot does not compact record bytes
+- deleting a slot does not reclaim free space yet
+- deleting an already deleted slot returns false
+
 ### Current scope of Phase 3
-The slotted page implementation currently exists as a page-level abstraction.
+The slotted page implementation now exists both as a page-level abstraction and as the active page format used by `HeapFile`.
 
 What is working now:
 - page initialization
@@ -101,13 +107,13 @@ What is working now:
 - slot-based record lookup inside the page
 - isolated tests for basic insert/read behavior
 - isolated test for full-page behavior
-
-What is not migrated yet:
-- `HeapFile` still uses the earlier contiguous record layout
+- isolated logical deletion test
+- `HeapFile` insert now uses `SlottedPage`
+- `HeapFile` full-scan lookup now reads records through slots
+- disk-backed heap-file test passes with reopen/read verification
 
 ## Next likely storage upgrade
 After the current slotted page abstraction:
-- migrate `HeapFile` to use `SlottedPage`
 - keep full scan lookup working through slots
-- later add deletion handling
 - later move toward variable-length records
+- later consider reclaiming deleted space

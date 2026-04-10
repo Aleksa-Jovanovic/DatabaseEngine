@@ -43,3 +43,21 @@ target_link_libraries(SlottedPageFullTest
     PRIVATE
         db_storage
 )
+
+add_executable(SlottedPageDeleteTest
+    tests/slotted_page_delete_test.cpp
+)
+
+target_link_libraries(SlottedPageDeleteTest
+    PRIVATE
+        db_storage
+)
+
+add_executable(HeapFileTest
+    tests/heap_file_test.cpp
+)
+
+target_link_libraries(HeapFileTest
+    PRIVATE
+        db_storage
+)

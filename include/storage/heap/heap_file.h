@@ -4,7 +4,7 @@
 #include <string>
 #include "storage/disk/disk_manager.h"
 #include "storage/page/page.h"
-#include "storage/page/page_layout.h"
+#include "storage/page/slotted_page.h"
 #include "storage/page/record.h"
 
 namespace db {
@@ -25,7 +25,7 @@ public:
 private:
     DiskManager disk_manager_;
 
-    // Try to append a record to the given page.
+    // Try to insert a record into the given page using the slotted-page layout.
     // Returns false if the page does not have enough space.
     bool try_insert_into_page(Page& page, const Record& record);
 };

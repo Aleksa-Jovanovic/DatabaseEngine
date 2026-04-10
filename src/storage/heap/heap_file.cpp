@@ -1,38 +1,12 @@
 #include "storage/heap/heap_file.h"
 
-#include <cstring>
-
 namespace db {
-
-namespace {
-// Layout helpers for the fixed-size page format used by HeapFile.
-constexpr std::size_t HEADER_SIZE = sizeof(PageHeader);
-constexpr std::size_t RECORD_SIZE = sizeof(Record);
-
-std::size_t max_records_per_page() {
-    return (PAGE_SIZE - HEADER_SIZE) / RECORD_SIZE;
-}
-
-// constexpr std::size_t MAX_RECORDS_PER_PAGE =
-//     (PAGE_SIZE - sizeof(PageHeader)) / sizeof(Record);
-
-}
 
 HeapFile::HeapFile(const std::string& file_name) : disk_manager_(file_name) {}
 
 bool HeapFile::try_insert_into_page(Page& page, const Record& record) {
-    // The page begins with a PageHeader, followed by a contiguous Record array.
-    auto* header = reinterpret_cast<PageHeader*>(page.data.data());
-
-    if (header->num_records >= max_records_per_page()) {
-        return false;
-    }
-
-    auto* records = reinterpret_cast<Record*>(page.data.data() + HEADER_SIZE);
-    records[header->num_records] = record;
-    header->num_records += 1;
-
-    return true;
+    SlottedPage slotted_page(page);
+    return slotted_page.insert_record(record);
 }
 
 void HeapFile::insert(const Record& record) {
@@ -41,8 +15,8 @@ void HeapFile::insert(const Record& record) {
         Page new_page{};
         new_page.page_id = disk_manager_.allocate_page();
 
-        auto* header = reinterpret_cast<PageHeader*>(new_page.data.data());
-        header->num_records = 0;
+        SlottedPage slotted_page(new_page);
+        slotted_page.initialize();
 
         try_insert_into_page(new_page, record);
         disk_manager_.write_page(new_page.page_id, new_page.data.data());
@@ -63,8 +37,8 @@ void HeapFile::insert(const Record& record) {
     Page new_page{};
     new_page.page_id = disk_manager_.allocate_page();
 
-    auto* header = reinterpret_cast<PageHeader*>(new_page.data.data());
-    header->num_records = 0;
+    SlottedPage slotted_page(new_page);
+    slotted_page.initialize();
 
     try_insert_into_page(new_page, record);
     disk_manager_.write_page(new_page.page_id, new_page.data.data());
@@ -77,12 +51,12 @@ std::optional<Record> HeapFile::find(std::uint32_t key) {
         page.page_id = page_id;
         disk_manager_.read_page(page_id, page.data.data());
 
-        auto* header = reinterpret_cast<PageHeader*>(page.data.data());
-        auto* records = reinterpret_cast<Record*>(page.data.data() + HEADER_SIZE);
+        SlottedPage slotted_page(page);
 
-        for (std::uint32_t i = 0; i < header->num_records; ++i) {
-            if (records[i].key == key) {
-                return records[i];
+        for (std::uint16_t i = 0; i < slotted_page.slot_count(); ++i) {
+            auto record = slotted_page.record_at(i);
+            if (record.has_value() && record->key == key) {
+                return record;
             }
         }
     }
@@ -90,4 +64,4 @@ std::optional<Record> HeapFile::find(std::uint32_t key) {
     return std::nullopt;
 }
 
-}
+}  // namespace db

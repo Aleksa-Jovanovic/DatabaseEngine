@@ -35,6 +35,10 @@ public:
     // Returns false if the page does not have enough free space.
     bool insert_record(const Record& record);
 
+    // Delete one record at slot index by invalidating the length
+    // Returns false if the slot index is invalid
+    bool delete_record(std::uint16_t slot_index);
+
     // Read the record referenced by the given slot.
     // Returns std::nullopt if the slot index is invalid.
     std::optional<Record> record_at(std::uint16_t slot_index) const;

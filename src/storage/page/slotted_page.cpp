@@ -74,6 +74,21 @@ bool SlottedPage::insert_record(const Record& record) {
     return true;
 }
 
+bool SlottedPage::delete_record(std::uint16_t slot_index) {
+    auto* slot_entry = slot_at(slot_index);
+    if (slot_entry == nullptr) {
+        return false;
+    }
+
+    if (slot_entry->length == 0) {
+        return false;
+    }
+
+    slot_entry->length = 0;
+    return true;
+}
+
+
 std::optional<Record> SlottedPage::record_at(std::uint16_t slot_index) const {
     const auto* slot = slot_at(slot_index);
     if (slot == nullptr) {
