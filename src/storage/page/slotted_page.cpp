@@ -84,8 +84,58 @@ bool SlottedPage::insert_var_record(const VarRecord& record) {
     return insert_record_bytes(serialized_record.data(), record_length);
 }
 
-bool SlottedPage::delete_record(std::uint16_t slot_index)
-{
+bool SlottedPage::update_record(std::uint16_t slot_index, const Record &record) {
+    auto* slot_entry = slot_at(slot_index);
+    if (slot_entry == nullptr) {
+        return false;
+    }
+
+    if (slot_entry->length != sizeof(Record)) {
+        return false;
+    }
+
+    if (slot_entry->offset + slot_entry->length > PAGE_SIZE) {
+        return false;
+    }
+
+    std::memcpy(data() + slot_entry->offset, &record, slot_entry->length);
+    return true;
+}
+
+bool SlottedPage::update_var_record(std::uint16_t slot_index, const VarRecord &record) {
+    auto* slot_entry = slot_at(slot_index);
+    if (slot_entry == nullptr) {
+        return false;
+    }
+    
+    if (slot_entry->length == 0) {
+        return false;
+    }
+
+    if(slot_entry->offset + slot_entry->length > PAGE_SIZE) {
+        return false;
+    }
+
+    std::vector<char> serialized_record = serialize_var_record(record);
+    const std::uint16_t new_length = static_cast<std::uint16_t>(serialized_record.size());
+
+    // If the new serialized record has the same size, overwrite in place.
+    if (slot_entry->length == new_length) {
+        std::memcpy(data() + slot_entry->offset, serialized_record.data(), new_length);
+        return true;
+    }
+
+    // Safer first-version strategy for size-changing updates:
+    // first try to insert the new record, then delete the old slot only if
+    // the new insert succeeds.
+    if (!insert_var_record(record)) {
+        return false;
+    }
+
+    return delete_record(slot_index);
+}
+
+bool SlottedPage::delete_record(std::uint16_t slot_index) {
     auto* slot_entry = slot_at(slot_index);
     if (slot_entry == nullptr) {
         return false;
@@ -135,8 +185,7 @@ std::optional<VarRecord> SlottedPage::var_record_at(std::uint16_t slot_index) co
     return record;
 }
 
-std::uint16_t SlottedPage::slot_count() const
-{
+std::uint16_t SlottedPage::slot_count() const {
     return fetch_header()->slot_count;
 }
 

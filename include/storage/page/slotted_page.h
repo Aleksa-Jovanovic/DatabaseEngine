@@ -40,6 +40,15 @@ public:
     // Returns false if the page does not have enough free space.
     bool insert_var_record(const VarRecord& record);
 
+    // Update one fixed-size record in place.
+    // Returns false if the slot is invalid, deleted, or not a fixed-size Record slot.
+    bool update_record(std::uint16_t slot_index, const Record& record);
+
+    // Update one variable-length record.
+    // If the new serialized record has the same size, overwrite in place.
+    // Otherwise, delete the old slot logically and insert the new record into a new slot.
+    bool update_var_record(std::uint16_t slot_index, const VarRecord& record);
+
     // Delete one record at slot index by invalidating the length
     // Returns false if the slot index is invalid
     bool delete_record(std::uint16_t slot_index);

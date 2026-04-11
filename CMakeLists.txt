@@ -63,6 +63,15 @@ target_link_libraries(SlottedPageVarRecordTest
         db_storage
 )
 
+add_executable(SlottedPageUpdateTest
+    tests/slotted_page_update_test.cpp
+)
+
+target_link_libraries(SlottedPageUpdateTest
+    PRIVATE
+        db_storage
+)
+
 add_executable(HeapFileTest
     tests/heap_file_test.cpp
 )
