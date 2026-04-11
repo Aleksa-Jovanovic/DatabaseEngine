@@ -31,6 +31,12 @@ Store and retrieve records without indexing.
 Goal:
 Make page layout closer to real database pages.
 
+Current status:
+Phase 3 is functionally complete in the current implementation.
+The project now has slotted pages, logical deletion, variable-length records,
+update handling, compaction, and heap-file integration built on top of the
+new page layout.
+
 ## Phase 4 - Buffer pool
 - cache pages in memory
 - track dirty pages
