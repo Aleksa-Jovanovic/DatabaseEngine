@@ -1,6 +1,7 @@
 #include "storage/page/slotted_page.h"
 
 #include <cstring>
+#include "storage/page/var_record_serializer.h"
 
 namespace db {
 
@@ -50,31 +51,41 @@ std::size_t SlottedPage::free_space() const {
     return (header->free_space_end - header->free_space_start);
 }
 
-bool SlottedPage::insert_record(const Record& record) {
-    if (free_space() < required_space_for_record()) {
+bool SlottedPage::insert_record_bytes(const char* record_data, std::uint16_t record_length) {
+    if (free_space() < sizeof(SlotEntry) + record_length) {
         return false;
     }
 
     auto* header = fetch_header();
-
-    const std::uint16_t record_size = static_cast<std::uint16_t>(sizeof(Record));
-    const std::uint16_t new_record_offset = header->free_space_end - record_size;
+    const std::uint16_t new_record_offset = header->free_space_end - record_length;
 
     // Record bytes grow backward from the end of the page.
-    std::memcpy(data() + new_record_offset, &record, sizeof(record));
+    std::memcpy(data() + new_record_offset, record_data, record_length);
 
     auto* new_slot = reinterpret_cast<SlotEntry*>(data() + header->free_space_start);
     new_slot->offset = new_record_offset;
-    new_slot->length = record_size;
+    new_slot->length = record_length;
 
     header->slot_count += 1;
     header->free_space_start += sizeof(SlotEntry);
-    header->free_space_end -= record_size;
+    header->free_space_end -= record_length;
 
     return true;
 }
 
-bool SlottedPage::delete_record(std::uint16_t slot_index) {
+bool SlottedPage::insert_record(const Record& record) {
+    const std::uint16_t record_size = static_cast<std::uint16_t>(sizeof(Record));
+    return insert_record_bytes(reinterpret_cast<const char*>(&record), record_size);
+}
+
+bool SlottedPage::insert_var_record(const VarRecord& record) {
+    std::vector<char> serialized_record = serialize_var_record(record);
+    const std::uint16_t record_length = static_cast<std::uint16_t>(serialized_record.size());
+    return insert_record_bytes(serialized_record.data(), record_length);
+}
+
+bool SlottedPage::delete_record(std::uint16_t slot_index)
+{
     auto* slot_entry = slot_at(slot_index);
     if (slot_entry == nullptr) {
         return false;
@@ -87,7 +98,6 @@ bool SlottedPage::delete_record(std::uint16_t slot_index) {
     slot_entry->length = 0;
     return true;
 }
-
 
 std::optional<Record> SlottedPage::record_at(std::uint16_t slot_index) const {
     const auto* slot = slot_at(slot_index);
@@ -108,7 +118,25 @@ std::optional<Record> SlottedPage::record_at(std::uint16_t slot_index) const {
     return record;
 }
 
-std::uint16_t SlottedPage::slot_count() const {
+std::optional<VarRecord> SlottedPage::var_record_at(std::uint16_t slot_index) const {
+    const auto* slot_entry = slot_at(slot_index);
+    if (slot_entry == nullptr) {
+        return std::nullopt;
+    }
+    
+    if (slot_entry->offset + slot_entry->length > PAGE_SIZE) {
+        return std::nullopt;
+    }
+
+    std::vector<char> buffer(slot_entry->length);
+    std::memcpy(buffer.data(), data() + slot_entry->offset, slot_entry->length);
+
+    std::optional<VarRecord> record = deserialize_var_record(buffer.data(), slot_entry->length);
+    return record;
+}
+
+std::uint16_t SlottedPage::slot_count() const
+{
     return fetch_header()->slot_count;
 }
 
@@ -124,4 +152,4 @@ std::size_t SlottedPage::required_space_for_record() const {
     return sizeof(SlotEntry) + sizeof(Record);
 }
 
-} // namespace db
+}  // namespace db

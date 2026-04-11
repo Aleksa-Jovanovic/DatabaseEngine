@@ -52,7 +52,6 @@ offset = page_id * PAGE_SIZE
 
 ## Current simplifications
 - no updates
-- no variable-size records
 - no checksums
 - no page type field yet
 
@@ -85,10 +84,25 @@ Current fields:
 ### Current slotted page behavior
 - `SlottedPage::initialize()` creates an empty slotted page
 - `insert_record()` inserts one fixed-size `Record` if enough space remains
+- `insert_var_record()` inserts one variable-length `VarRecord` if enough space remains
 - `delete_record(slot_index)` performs logical deletion by invalidating the slot length
 - `record_at(slot_index)` reads a record through the slot directory
+- `var_record_at(slot_index)` reads a variable-length record through the slot directory
 - deleted slots are treated as unreadable
 - `free_space()` returns the currently available free bytes in the page
+
+### Current variable-length record format
+The current variable-length record type is:
+- `key` as `uint32_t`
+- `value` as variable-length string data
+
+Current serialized byte layout:
+- `[key][value_length][value_bytes]`
+
+Current serializer behavior:
+- `serialized_size()` returns the total byte size needed for one serialized record
+- `serialize_var_record()` produces a contiguous byte buffer
+- `deserialize_var_record()` validates raw bytes and rebuilds a `VarRecord`
 
 ### Current deletion behavior
 - deletion is logical, not physical
@@ -104,10 +118,14 @@ What is working now:
 - page initialization
 - slot directory management
 - fixed-size record insertion into the page
+- variable-length record insertion into the page
 - slot-based record lookup inside the page
+- variable-length record lookup inside the page
 - isolated tests for basic insert/read behavior
 - isolated test for full-page behavior
 - isolated logical deletion test
+- isolated serializer test for `VarRecord`
+- isolated slotted-page variable-length record test
 - `HeapFile` insert now uses `SlottedPage`
 - `HeapFile` full-scan lookup now reads records through slots
 - disk-backed heap-file test passes with reopen/read verification
@@ -115,5 +133,5 @@ What is working now:
 ## Next likely storage upgrade
 After the current slotted page abstraction:
 - keep full scan lookup working through slots
-- later move toward variable-length records
 - later consider reclaiming deleted space
+- later decide how `HeapFile` should expose variable-length records

@@ -7,6 +7,7 @@
 #include "storage/page/page.h"
 #include "storage/page/page_layout.h"
 #include "storage/page/record.h"
+#include "storage/page/var_record.h"
 
 namespace db {
 
@@ -35,6 +36,10 @@ public:
     // Returns false if the page does not have enough free space.
     bool insert_record(const Record& record);
 
+    // Insert one variable-length record into the page.
+    // Returns false if the page does not have enough free space.
+    bool insert_var_record(const VarRecord& record);
+
     // Delete one record at slot index by invalidating the length
     // Returns false if the slot index is invalid
     bool delete_record(std::uint16_t slot_index);
@@ -42,6 +47,7 @@ public:
     // Read the record referenced by the given slot.
     // Returns std::nullopt if the slot index is invalid.
     std::optional<Record> record_at(std::uint16_t slot_index) const;
+    std::optional<VarRecord> var_record_at(std::uint16_t slot_index) const;
 
     // Return the number of slots currently stored in the page.
     std::uint16_t slot_count() const;
@@ -55,6 +61,9 @@ private:
 
     // Return how many bytes are needed to add one more slot and one record.
     std::size_t required_space_for_record() const;
+
+    // Insert one raw record payload and create a matching slot entry.
+    bool insert_record_bytes(const char* record_data, std::uint16_t record_length);
 };
 
 }   // namespace db

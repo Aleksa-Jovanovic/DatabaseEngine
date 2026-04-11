@@ -1,13 +1,14 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 namespace db {
 
 // For data that represents one stored row.
-struct Record {
+struct VarRecord {
     std::uint32_t key;
-    std::uint32_t value;
+    std::string value;
 };
 
 } // namespace db

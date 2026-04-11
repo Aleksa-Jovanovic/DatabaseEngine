@@ -10,6 +10,7 @@ add_library(db_storage
     src/storage/disk/disk_manager.cpp
     src/storage/heap/heap_file.cpp
     src/storage/page/slotted_page.cpp
+    src/storage/page/var_record_serializer.cpp
 )
 
 target_include_directories(db_storage
@@ -53,11 +54,29 @@ target_link_libraries(SlottedPageDeleteTest
         db_storage
 )
 
+add_executable(SlottedPageVarRecordTest
+    tests/slotted_page_var_record_test.cpp
+)
+
+target_link_libraries(SlottedPageVarRecordTest
+    PRIVATE
+        db_storage
+)
+
 add_executable(HeapFileTest
     tests/heap_file_test.cpp
 )
 
 target_link_libraries(HeapFileTest
+    PRIVATE
+        db_storage
+)
+
+add_executable(VarRecordSerializerTest
+    tests/var_record_serializer_test.cpp
+)
+
+target_link_libraries(VarRecordSerializerTest
     PRIVATE
         db_storage
 )
