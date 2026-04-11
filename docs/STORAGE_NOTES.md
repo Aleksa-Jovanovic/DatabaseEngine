@@ -58,7 +58,6 @@ offset = page_id * PAGE_SIZE
 - data remains persisted in a page-based disk file through `DiskManager`
 
 ## Current simplifications
-- no updates
 - no checksums
 - no page type field yet
 
@@ -93,6 +92,7 @@ Current fields:
 - `insert_record()` inserts one fixed-size `Record` if enough space remains
 - `insert_var_record()` inserts one variable-length `VarRecord` if enough space remains
 - `delete_record(slot_index)` performs logical deletion by invalidating the slot length
+- `compact_page()` repacks live record bytes and rebuilds contiguous free space
 - `record_at(slot_index)` reads a record through the slot directory
 - `var_record_at(slot_index)` reads a variable-length record through the slot directory
 - deleted slots are treated as unreadable
@@ -114,9 +114,16 @@ Current serializer behavior:
 ### Current deletion behavior
 - deletion is logical, not physical
 - deleting a slot does not remove the slot entry
-- deleting a slot does not compact record bytes
-- deleting a slot does not reclaim free space yet
+- deleting a slot does not compact record bytes immediately
 - deleting an already deleted slot returns false
+
+### Current compaction behavior
+- compaction preserves slot indexes
+- compaction keeps the same number of slot entries
+- compaction rewrites only live record bytes
+- compaction updates slot offsets after records are moved
+- compaction rebuilds one contiguous free-space region
+- compaction is currently an explicit page-level operation
 
 ### Current scope of Phase 3
 The slotted page implementation now exists both as a page-level abstraction and as the active page format used by `HeapFile`.
@@ -131,6 +138,7 @@ What is working now:
 - isolated tests for basic insert/read behavior
 - isolated test for full-page behavior
 - isolated logical deletion test
+- isolated compaction test
 - isolated serializer test for `VarRecord`
 - isolated slotted-page variable-length record test
 - `HeapFile` insert now uses `SlottedPage`

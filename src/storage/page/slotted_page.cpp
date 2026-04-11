@@ -1,9 +1,18 @@
 #include "storage/page/slotted_page.h"
 
 #include <cstring>
+#include <vector>
 #include "storage/page/var_record_serializer.h"
 
 namespace db {
+
+namespace {
+struct LiveRecordImage {
+    std::uint16_t slot_index;
+    std::uint16_t length;
+    std::vector<char> bytes;
+};
+} // namespace
 
 SlottedPage::SlottedPage(Page& page) : page_(page) {}
 
@@ -147,6 +156,63 @@ bool SlottedPage::delete_record(std::uint16_t slot_index) {
 
     slot_entry->length = 0;
     return true;
+}
+
+// Compaction keeps the same number of slot entries and preserves slot indexes.
+// That is important because RowId depends on stable slot positions.
+void SlottedPage::compact_page() {
+    std::vector<LiveRecordImage> live_records;
+
+    for (std::uint16_t i = 0; i < slot_count(); ++i) {
+        const auto* slot_entry = slot_at(i);
+        if (slot_entry == nullptr) {
+            continue;
+        }
+
+        if (slot_entry->length == 0) {
+            continue;
+        }
+
+        if (slot_entry->offset + slot_entry->length > PAGE_SIZE) {
+            continue;
+        }
+
+        LiveRecordImage record_image{};
+        record_image.slot_index = i;
+        record_image.length = slot_entry->length;
+        record_image.bytes.resize(slot_entry->length);
+
+        // Copy live record bytes out first so compaction does not depend on
+        // overlapping in-place moves inside the same page buffer.
+        std::memcpy(
+            record_image.bytes.data(),
+            data() + slot_entry->offset,
+            slot_entry->length
+        );
+
+        live_records.push_back(std::move(record_image));
+    }
+
+    std::uint16_t write_pointer = PAGE_SIZE;
+
+    for (const auto& record_image : live_records) {
+        // Pack live records tightly from the end of the page backward, leaving
+        // one contiguous free-space region between the slot directory and data.
+        write_pointer -= record_image.length;
+
+        std::memcpy(
+            data() + write_pointer,
+            record_image.bytes.data(),
+            record_image.length
+        );
+
+        auto* slot_entry = slot_at(record_image.slot_index);
+        slot_entry->offset = write_pointer;
+    }
+
+    // Slot count and slot directory size stay unchanged, so only the end of
+    // the free-space region moves after compaction.
+    fetch_header()->free_space_end = write_pointer;
 }
 
 std::optional<Record> SlottedPage::record_at(std::uint16_t slot_index) const {

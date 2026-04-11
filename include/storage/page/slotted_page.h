@@ -53,6 +53,10 @@ public:
     // Returns false if the slot index is invalid
     bool delete_record(std::uint16_t slot_index);
 
+    // Compact live record bytes toward the end of the page and rebuild one
+    // contiguous free-space region in the middle.
+    void compact_page();
+
     // Read the record referenced by the given slot.
     // Returns std::nullopt if the slot index is invalid.
     std::optional<Record> record_at(std::uint16_t slot_index) const;
