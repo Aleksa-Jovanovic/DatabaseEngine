@@ -27,74 +27,22 @@ target_link_libraries(DatabaseEngine
         db_storage
 )
 
-add_executable(SlottedPageTest
-    tests/slotted_page_test.cpp
-)
+function(add_db_test test_name test_source)
+    add_executable(${test_name}
+        ${test_source}
+    )
 
-target_link_libraries(SlottedPageTest
-    PRIVATE
-        db_storage
-)
+    target_link_libraries(${test_name}
+        PRIVATE
+            db_storage
+    )
+endfunction()
 
-add_executable(SlottedPageFullTest
-    tests/slotted_page_full_test.cpp
-)
-
-target_link_libraries(SlottedPageFullTest
-    PRIVATE
-        db_storage
-)
-
-add_executable(SlottedPageDeleteTest
-    tests/slotted_page_delete_test.cpp
-)
-
-target_link_libraries(SlottedPageDeleteTest
-    PRIVATE
-        db_storage
-)
-
-add_executable(SlottedPageVarRecordTest
-    tests/slotted_page_var_record_test.cpp
-)
-
-target_link_libraries(SlottedPageVarRecordTest
-    PRIVATE
-        db_storage
-)
-
-add_executable(SlottedPageUpdateTest
-    tests/slotted_page_update_test.cpp
-)
-
-target_link_libraries(SlottedPageUpdateTest
-    PRIVATE
-        db_storage
-)
-
-add_executable(HeapFileTest
-    tests/heap_file_test.cpp
-)
-
-target_link_libraries(HeapFileTest
-    PRIVATE
-        db_storage
-)
-
-add_executable(HeapFileRowIdTest
-    tests/heap_file_row_id_test.cpp
-)
-
-target_link_libraries(HeapFileRowIdTest
-    PRIVATE
-        db_storage
-)
-
-add_executable(VarRecordSerializerTest
-    tests/var_record_serializer_test.cpp
-)
-
-target_link_libraries(VarRecordSerializerTest
-    PRIVATE
-        db_storage
-)
+add_db_test(SlottedPageTest tests/slotted_page_test.cpp)
+add_db_test(SlottedPageFullTest tests/slotted_page_full_test.cpp)
+add_db_test(SlottedPageDeleteTest tests/slotted_page_delete_test.cpp)
+add_db_test(SlottedPageVarRecordTest tests/slotted_page_var_record_test.cpp)
+add_db_test(SlottedPageUpdateTest tests/slotted_page_update_test.cpp)
+add_db_test(HeapFileTest tests/heap_file_test.cpp)
+add_db_test(HeapFileRowIdTest tests/heap_file_row_id_test.cpp)
+add_db_test(VarRecordSerializerTest tests/var_record_serializer_test.cpp)
