@@ -81,6 +81,15 @@ target_link_libraries(HeapFileTest
         db_storage
 )
 
+add_executable(HeapFileRowIdTest
+    tests/heap_file_row_id_test.cpp
+)
+
+target_link_libraries(HeapFileRowIdTest
+    PRIVATE
+        db_storage
+)
+
 add_executable(VarRecordSerializerTest
     tests/var_record_serializer_test.cpp
 )

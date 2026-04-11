@@ -4,9 +4,9 @@
 int main() {
     db::HeapFile heap("test.db");
 
-    heap.insert({1, 100});
-    heap.insert({2, 200});
-    heap.insert({3, 300});
+    auto row_id = heap.insert({1, 100});
+    row_id = heap.insert({2, 200});
+    row_id = heap.insert({3, 300});
 
     auto result = heap.find(3);
     if (result.has_value()) {

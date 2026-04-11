@@ -46,6 +46,10 @@ offset = page_id * PAGE_SIZE
 - initialize a new page as a slotted page before first insert
 - read the last page and try to append through `SlottedPage`
 - if the last page is full, allocate a new page and insert there
+- fixed-size insert returns a `RowId` with `page_id` and `slot_index`
+- `get(row_id)` reads a fixed-size record directly by physical location
+- `delete_record(row_id)` performs logical deletion through the slotted page
+- `update_record(row_id, record)` updates a fixed-size record in place
 - `find(key)` scans all pages in order
 - each page scan walks through slot entries and reads records through the slot directory
 - data remains persisted in a page-based disk file through `DiskManager`
@@ -127,8 +131,11 @@ What is working now:
 - isolated serializer test for `VarRecord`
 - isolated slotted-page variable-length record test
 - `HeapFile` insert now uses `SlottedPage`
+- `HeapFile` fixed-size insert now returns a `RowId`
+- `HeapFile` fixed-size get/update/delete work through `RowId`
 - `HeapFile` full-scan lookup now reads records through slots
 - disk-backed heap-file test passes with reopen/read verification
+- disk-backed heap-file `RowId` test passes with reopen/read verification
 
 ## Next likely storage upgrade
 After the current slotted page abstraction:
