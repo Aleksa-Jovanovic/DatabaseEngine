@@ -150,8 +150,53 @@ What is working now:
 - disk-backed heap-file `RowId` test passes with reopen/read verification
 - disk-backed heap-file variable-length test passes with reopen/read verification
 
+## Page cache work in progress
+Phase 4 has started with a first `PageCacheManager` abstraction.
+
+Current page cache goal:
+- keep a fixed number of pages in memory
+- reduce direct page reads and writes in higher storage layers
+- track whether cached pages are dirty
+- flush cached pages back to disk when needed
+
+### Current page cache design
+The current page cache uses:
+- a fixed-size vector of `PageFrame` objects
+- one `PageFrame` per cache slot
+- a page table mapping `page_id -> frame_index`
+
+### Current PageFrame fields
+Each frame currently stores:
+- `page`
+- `is_dirty`
+- `pin_count`
+- `is_valid`
+
+### Current page cache behavior
+The current `PageCacheManager` can:
+- fetch an existing page into memory with `fetch_page(page_id)`
+- allocate a new logical page with `new_page()`
+- mark a page dirty and release one pin with `unpin_page(page_id, is_dirty)`
+- flush one cached page with `flush_page(page_id)`
+- flush all valid cached pages with `flush_all_pages()`
+
+### Current replacement behavior
+The first version does not implement a real replacement policy yet.
+
+Current frame selection behavior:
+- first use an invalid frame if one exists
+- otherwise reuse the first frame whose `pin_count` is zero
+- if all frames are pinned, page fetch or page allocation fails
+
+### Current page cache simplifications
+- no LRU or clock replacement yet
+- no concurrency control
+- no latches
+- no background flushing
+- no `HeapFile` integration yet
+
 ## Next likely storage upgrade
-After the current slotted page abstraction:
-- keep full scan lookup working through slots
-- later consider reclaiming deleted space
-- later decide how `HeapFile` should expose variable-length records
+After the first page cache layer:
+- test cached page fetch and flush behavior in isolation
+- integrate `HeapFile` with `PageCacheManager`
+- later add a real replacement policy
