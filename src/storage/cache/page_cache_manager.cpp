@@ -22,14 +22,21 @@ std::optional<std::size_t> PageCacheManager::find_available_frame() {
         }
     }
 
-    // Fall back to the first unpinned cached frame.
+    // Choose the least recently used unpinned frame (page).
+    std::optional<std::size_t> lru_frame_index;
+
     for (std::size_t i = 0; i < frames_.size(); ++i) {
-        if (frames_[i].pin_count == 0) {
-            return i;
+        if (frames_[i].pin_count != 0) {
+            continue;
+        }
+
+        if (!lru_frame_index.has_value()
+            || frames_[i].last_used_tick < frames_[lru_frame_index.value()].last_used_tick) {
+            lru_frame_index = i;
         }
     }
 
-    return std::nullopt;
+    return lru_frame_index;
 }
 
 void PageCacheManager::load_page_into_frame(std::size_t frame_index, std::uint32_t page_id) {
@@ -49,8 +56,13 @@ void PageCacheManager::load_page_into_frame(std::size_t frame_index, std::uint32
     frame.is_dirty = false;
     frame.pin_count = 0;
     frame.is_valid = true;
+    touch_frame(frame);
 
     page_table_[page_id] = frame_index;
+}
+
+void PageCacheManager::touch_frame(PageFrame& frame) {
+    frame.last_used_tick = ++current_tick_;
 }
 
 Page* PageCacheManager::fetch_page(std::uint32_t page_id) {
@@ -62,6 +74,7 @@ Page* PageCacheManager::fetch_page(std::uint32_t page_id) {
     if (existing_frame_index.has_value()) {
         PageFrame& frame = frames_[existing_frame_index.value()];
         ++frame.pin_count;
+        touch_frame(frame);
         return &frame.page;
     }
 
@@ -102,6 +115,7 @@ Page* PageCacheManager::new_page() {
     frame.is_dirty = false;
     frame.pin_count = 1;
     frame.is_valid = true;
+    touch_frame(frame);
 
     page_table_[new_page_id] = frame_index;
     return &frame.page;

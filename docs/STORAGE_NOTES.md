@@ -173,6 +173,7 @@ Each frame currently stores:
 - `is_dirty`
 - `pin_count`
 - `is_valid`
+- `last_used_tick`
 
 ### Current page cache behavior
 The current `PageCacheManager` can:
@@ -187,25 +188,40 @@ Current `HeapFile` integration:
 - heap-file reads fetch pages from the page cache and unpin them after access
 - heap-file writes mark cached pages dirty and then flush them immediately for now
 - existing heap-file tests pass after the page-cache migration
-- isolated `PageCacheManager` tests pass for persistence and pinned-frame behavior
+- isolated `PageCacheManager` tests pass for persistence, pinned-frame behavior, and LRU eviction behavior
 
 ### Current replacement behavior
-The first version does not implement a real replacement policy yet.
-
 Current frame selection behavior:
 - first use an invalid frame if one exists
-- otherwise reuse the first frame whose `pin_count` is zero
+- otherwise evict the least recently used frame whose `pin_count` is zero
 - if all frames are pinned, page fetch or page allocation fails
 
+### Current LRU behavior
+The current page cache uses a simple timestamp-based LRU policy.
+
+Current LRU tracking behavior:
+- each frame stores `last_used_tick`
+- `PageCacheManager` advances one global usage counter on page access
+- cache hits update the touched frame's usage tick
+- page loads into a frame update the new frame's usage tick
+- newly allocated pages also get a fresh usage tick
+- flush and unpin operations do not change recency
+
+### Current test-only helpers
+The current page cache exposes a small test-only helper:
+- `is_page_cached(page_id)` is only compiled when `DB_TESTING` is enabled
+- test targets define `DB_TESTING` through CMake
+- the helper is used to verify LRU eviction decisions without making the normal runtime API larger
+
 ### Current page cache simplifications
-- no LRU or clock replacement yet
 - no concurrency control
 - no latches
 - no background flushing
 - write-back policy still lives partly in `HeapFile` because heap-file writes flush immediately after success
-- delayed flushing and replacement policy should later move more fully into `PageCacheManager`
+- delayed flushing should later move more fully into `PageCacheManager`
+- no clock policy or more advanced replacement tuning yet
 
 ## Next likely storage upgrade
 After the first page cache layer:
 - reduce eager flushes in `HeapFile` and move more write-back policy into `PageCacheManager`
-- later add a real replacement policy
+- later consider whether a clock-style replacement policy is worth adding

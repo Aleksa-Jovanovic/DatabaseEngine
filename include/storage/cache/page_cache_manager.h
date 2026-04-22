@@ -18,6 +18,7 @@ struct PageFrame {
     bool is_dirty = false;
     std::uint32_t pin_count = 0;
     bool is_valid = false;
+    std::uint64_t last_used_tick = 0;
 };
 
 // PageCacheManager keeps a fixed number of disk pages in memory.
@@ -50,14 +51,24 @@ public:
         return disk_manager_.get_page_count();
     }
 
+#ifdef DB_TESTING
+    // Test helper: report whether a page is currently cached.
+    inline bool is_page_cached(std::uint32_t page_id) const {
+        return page_table_.find(page_id) != page_table_.end();
+    }
+#endif
+
 private:
     std::optional<std::size_t> find_frame_for_page(std::uint32_t page_id) const;
     std::optional<std::size_t> find_available_frame();
     void load_page_into_frame(std::size_t frame_index, std::uint32_t page_id);
+    void touch_frame(PageFrame& frame);
 
     DiskManager disk_manager_;
     std::vector<PageFrame> frames_;
     std::unordered_map<std::uint32_t, std::size_t> page_table_;
+
+    std::uint64_t current_tick_ = 0;
 };
 
 }   // namespace db

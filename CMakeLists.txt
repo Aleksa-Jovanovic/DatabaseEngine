@@ -33,6 +33,11 @@ function(add_db_test test_name test_source)
         ${test_source}
     )
 
+    target_compile_definitions(${test_name}
+        PRIVATE
+            DB_TESTING
+    )
+
     target_link_libraries(${test_name}
         PRIVATE
             db_storage

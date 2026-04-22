@@ -65,6 +65,43 @@ int main() {
 
     std::filesystem::remove(file_name);
 
+    {
+        db::PageCacheManager cache(file_name, 2);
+
+        db::Page* page0 = cache.new_page();
+        assert(page0 != nullptr);
+        const std::uint32_t page0_id = page0->page_id;
+        page0->data[0] = 'A';
+        assert(cache.unpin_page(page0_id, true));
+        assert(cache.flush_page(page0_id));
+
+        db::Page* page1 = cache.new_page();
+        assert(page1 != nullptr);
+        const std::uint32_t page1_id = page1->page_id;
+        page1->data[0] = 'B';
+        assert(cache.unpin_page(page1_id, true));
+        assert(cache.flush_page(page1_id));
+
+        // Touch page 0 again so page 1 becomes the least recently used page.
+        db::Page* page0_again = cache.fetch_page(page0_id);
+        assert(page0_again != nullptr);
+        assert(page0_again->data[0] == 'A');
+        assert(cache.unpin_page(page0_id, false));
+
+        db::Page* page2 = cache.new_page();
+        assert(page2 != nullptr);
+        const std::uint32_t page2_id = page2->page_id;
+        page2->data[0] = 'C';
+        assert(cache.unpin_page(page2_id, true));
+        assert(cache.flush_page(page2_id));
+
+        assert(cache.is_page_cached(page0_id));
+        assert(!cache.is_page_cached(page1_id));
+        assert(cache.is_page_cached(page2_id));
+    }
+
+    std::filesystem::remove(file_name);
+
     std::cout << "PageCacheManager test passed.\n";
     return 0;
 }
