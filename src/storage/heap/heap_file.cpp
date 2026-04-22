@@ -50,14 +50,6 @@ std::optional<RowId> HeapFile::insert(const Record& record) {
 
         const RowId row_id{new_page_ptr->page_id, slot_index.value()};
         page_cache_manager_.unpin_page(new_page_ptr->page_id, true);
-        
-        // For now HeapFile flushes immediately after a successful write so behavior
-        // stays close to the old DiskManager-based version. Later, write-back policy
-        // should live inside PageCacheManager instead of being decided here.
-        if (!page_cache_manager_.flush_page(row_id.page_id)) {
-            return std::nullopt;
-        }
-
         return row_id;
     }
 
@@ -72,14 +64,6 @@ std::optional<RowId> HeapFile::insert(const Record& record) {
     if (slot_index.has_value()) {
         const RowId row_id{page_ptr->page_id, slot_index.value()};
         page_cache_manager_.unpin_page(last_page_id, true);
-
-        // For now HeapFile flushes immediately after a successful write so behavior
-        // stays close to the old DiskManager-based version. Later, write-back policy
-        // should live inside PageCacheManager instead of being decided here.
-        if (!page_cache_manager_.flush_page(last_page_id)) {
-            return std::nullopt;
-        }
-
         return row_id;
     }
 
@@ -102,14 +86,6 @@ std::optional<RowId> HeapFile::insert(const Record& record) {
 
     const RowId row_id{new_page_ptr->page_id, slot_index.value()};
     page_cache_manager_.unpin_page(new_page_ptr->page_id, true);
-
-    // For now HeapFile flushes immediately after a successful write so behavior
-    // stays close to the old DiskManager-based version. Later, write-back policy
-    // should live inside PageCacheManager instead of being decided here.
-    if (!page_cache_manager_.flush_page(row_id.page_id)) {
-        return std::nullopt;
-    }
-
     return row_id;
 }
 
@@ -132,14 +108,6 @@ std::optional<RowId> HeapFile::insert_var_record(const VarRecord& record) {
 
         const RowId row_id{new_page_ptr->page_id, slot_index.value()};
         page_cache_manager_.unpin_page(new_page_ptr->page_id, true);
-
-        // For now HeapFile flushes immediately after a successful write so behavior
-        // stays close to the old DiskManager-based version. Later, write-back policy
-        // should live inside PageCacheManager instead of being decided here.
-        if (!page_cache_manager_.flush_page(row_id.page_id)) {
-            return std::nullopt;
-        }
-
         return row_id;
     }
 
@@ -154,14 +122,6 @@ std::optional<RowId> HeapFile::insert_var_record(const VarRecord& record) {
     if (slot_index.has_value()) {
         const RowId row_id{page_ptr->page_id, slot_index.value()};
         page_cache_manager_.unpin_page(last_page_id, true);
-
-        // For now HeapFile flushes immediately after a successful write so behavior
-        // stays close to the old DiskManager-based version. Later, write-back policy
-        // should live inside PageCacheManager instead of being decided here.
-        if (!page_cache_manager_.flush_page(last_page_id)) {
-            return std::nullopt;
-        }
-
         return row_id;
     }
 
@@ -184,14 +144,6 @@ std::optional<RowId> HeapFile::insert_var_record(const VarRecord& record) {
 
     const RowId row_id{new_page_ptr->page_id, slot_index.value()};
     page_cache_manager_.unpin_page(new_page_ptr->page_id, true);
-
-    // For now HeapFile flushes immediately after a successful write so behavior
-    // stays close to the old DiskManager-based version. Later, write-back policy
-    // should live inside PageCacheManager instead of being decided here.
-    if (!page_cache_manager_.flush_page(row_id.page_id)) {
-        return std::nullopt;
-    }
-
     return row_id;
 }
 
@@ -258,10 +210,7 @@ bool HeapFile::delete_record(const RowId& row_id) {
     }
 
     page_cache_manager_.unpin_page(row_id.page_id, true);
-    // For now HeapFile flushes immediately after a successful write so behavior
-    // stays close to the old DiskManager-based version. Later, write-back policy
-    // should live inside PageCacheManager instead of being decided here.
-    return page_cache_manager_.flush_page(row_id.page_id);
+    return true;
 }
 
 bool HeapFile::update_record(const RowId& row_id, const Record& record) {
@@ -277,11 +226,7 @@ bool HeapFile::update_record(const RowId& row_id, const Record& record) {
     }
 
     page_cache_manager_.unpin_page(row_id.page_id, true);
-
-    // For now HeapFile flushes immediately after a successful write so behavior
-    // stays close to the old DiskManager-based version. Later, write-back policy
-    // should live inside PageCacheManager instead of being decided here.
-    return page_cache_manager_.flush_page(row_id.page_id);
+    return true;
 }
 
 std::optional<RowId> HeapFile::update_var_record(const RowId& row_id, const VarRecord& record) {
@@ -317,14 +262,6 @@ std::optional<RowId> HeapFile::update_var_record(const RowId& row_id, const VarR
     }
 
     page_cache_manager_.unpin_page(row_id.page_id, true);
-
-    // For now HeapFile flushes immediately after a successful write so behavior
-    // stays close to the old DiskManager-based version. Later, write-back policy
-    // should live inside PageCacheManager instead of being decided here.
-    if (!page_cache_manager_.flush_page(row_id.page_id)) {
-        return std::nullopt;
-    }
-
     return result;
 }
 

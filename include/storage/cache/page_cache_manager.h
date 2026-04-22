@@ -27,6 +27,7 @@ struct PageFrame {
 class PageCacheManager {
 public:
     PageCacheManager(const std::string& file_name, std::size_t cache_size);
+    ~PageCacheManager();
 
     // Load an existing logical page into the cache and pin it.
     // Returns nullptr if the page does not exist or no frame is available.

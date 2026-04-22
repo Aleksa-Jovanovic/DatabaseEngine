@@ -56,7 +56,8 @@ offset = page_id * PAGE_SIZE
 - `find(key)` scans all pages in order
 - each page scan walks through slot entries and reads records through the slot directory
 - read and write operations now go through `PageCacheManager`
-- write operations currently flush immediately after successful mutation to preserve simple persistence behavior during the Phase 4 transition
+- write operations now mark cached pages dirty and rely on page-cache flushing
+- dirty pages are currently written back on eviction, explicit flush, or page-cache destruction
 - data remains persisted in a page-based disk file through `DiskManager` underneath the page cache layer
 
 ## Current simplifications
@@ -186,7 +187,7 @@ The current `PageCacheManager` can:
 Current `HeapFile` integration:
 - `HeapFile` now uses `PageCacheManager` instead of talking directly to `DiskManager`
 - heap-file reads fetch pages from the page cache and unpin them after access
-- heap-file writes mark cached pages dirty and then flush them immediately for now
+- heap-file writes mark cached pages dirty and let the page cache handle write-back
 - existing heap-file tests pass after the page-cache migration
 - isolated `PageCacheManager` tests pass for persistence, pinned-frame behavior, and LRU eviction behavior
 
@@ -217,11 +218,18 @@ The current page cache exposes a small test-only helper:
 - no concurrency control
 - no latches
 - no background flushing
-- write-back policy still lives partly in `HeapFile` because heap-file writes flush immediately after success
-- delayed flushing should later move more fully into `PageCacheManager`
+- no explicit checkpointing policy yet
 - no clock policy or more advanced replacement tuning yet
+
+### Current durability limitation
+The current page cache uses write-back behavior, not crash-safe durability.
+
+Current limitation:
+- dirty pages can still be lost if power is lost before they are flushed
+- flushing on eviction or destruction helps normal shutdown behavior but does not protect against crashes
+- write-ahead logging and recovery are planned for a later phase
 
 ## Next likely storage upgrade
 After the first page cache layer:
-- reduce eager flushes in `HeapFile` and move more write-back policy into `PageCacheManager`
+- add more tests around dirty-page write-back behavior
 - later consider whether a clock-style replacement policy is worth adding

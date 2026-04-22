@@ -5,6 +5,10 @@ namespace db {
 PageCacheManager::PageCacheManager(const std::string& file_name, std::size_t cache_size)
     : disk_manager_(file_name), frames_(cache_size) {}
 
+PageCacheManager::~PageCacheManager() {
+    flush_all_pages();
+}
+
 std::optional<std::size_t> PageCacheManager::find_frame_for_page(std::uint32_t page_id) const {
     auto it = page_table_.find(page_id);
     if (it == page_table_.end()) {

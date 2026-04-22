@@ -46,6 +46,12 @@ new page layout.
 Goal:
 Separate disk I/O from memory page access.
 
+Current status:
+Phase 4 is functionally complete in the current implementation.
+The project now has an integrated `PageCacheManager`, dirty-page tracking,
+write-back flushing, heap-file integration, and a simple LRU replacement
+policy for unpinned cached pages.
+
 ## Phase 5 - Indexing
 - B+ tree page layout
 - internal and leaf pages
