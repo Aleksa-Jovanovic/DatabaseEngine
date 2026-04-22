@@ -44,18 +44,21 @@ offset = page_id * PAGE_SIZE
 ## Current heap file behavior
 - if the file has no pages yet, allocate the first page
 - initialize a new page as a slotted page before first insert
-- read the last page and try to append through `SlottedPage`
+- fetch the last page through `PageCacheManager` and try to append through `SlottedPage`
 - if the last page is full, allocate a new page and insert there
 - fixed-size insert returns a `RowId` with `page_id` and `slot_index`
 - variable-length insert returns a `RowId` with `page_id` and `slot_index`
-- `get(row_id)` reads a fixed-size record directly by physical location
-- `get_var_record(row_id)` reads a variable-length record directly by physical location
+- `get(row_id)` fetches a cached page and reads a fixed-size record directly by physical location
+- `get_var_record(row_id)` fetches a cached page and reads a variable-length record directly by physical location
 - `delete_record(row_id)` performs logical deletion through the slotted page
 - `update_record(row_id, record)` updates a fixed-size record in place
 - `update_var_record(row_id, record)` may return a new `RowId` if the updated record moves to a new slot
 - `find(key)` scans all pages in order
 - each page scan walks through slot entries and reads records through the slot directory
-- data remains persisted in a page-based disk file through `DiskManager`
+- read and write operations now go through `PageCacheManager`
+- write operations now mark cached pages dirty and rely on page-cache flushing
+- dirty pages are currently written back on eviction, explicit flush, or page-cache destruction
+- data remains persisted in a page-based disk file through `DiskManager` underneath the page cache layer
 
 ## Current simplifications
 - no checksums
@@ -150,8 +153,83 @@ What is working now:
 - disk-backed heap-file `RowId` test passes with reopen/read verification
 - disk-backed heap-file variable-length test passes with reopen/read verification
 
+## Current page cache layer
+Phase 4 now has a first integrated `PageCacheManager` abstraction.
+
+Current page cache goal:
+- keep a fixed number of pages in memory
+- reduce direct page reads and writes in higher storage layers
+- track whether cached pages are dirty
+- flush cached pages back to disk when needed
+
+### Current page cache design
+The current page cache uses:
+- a fixed-size vector of `PageFrame` objects
+- one `PageFrame` per cache slot
+- a page table mapping `page_id -> frame_index`
+
+### Current PageFrame fields
+Each frame currently stores:
+- `page`
+- `is_dirty`
+- `pin_count`
+- `is_valid`
+- `last_used_tick`
+
+### Current page cache behavior
+The current `PageCacheManager` can:
+- fetch an existing page into memory with `fetch_page(page_id)`
+- allocate a new logical page with `new_page()`
+- mark a page dirty and release one pin with `unpin_page(page_id, is_dirty)`
+- flush one cached page with `flush_page(page_id)`
+- flush all valid cached pages with `flush_all_pages()`
+
+Current `HeapFile` integration:
+- `HeapFile` now uses `PageCacheManager` instead of talking directly to `DiskManager`
+- heap-file reads fetch pages from the page cache and unpin them after access
+- heap-file writes mark cached pages dirty and let the page cache handle write-back
+- existing heap-file tests pass after the page-cache migration
+- isolated `PageCacheManager` tests pass for persistence, pinned-frame behavior, and LRU eviction behavior
+
+### Current replacement behavior
+Current frame selection behavior:
+- first use an invalid frame if one exists
+- otherwise evict the least recently used frame whose `pin_count` is zero
+- if all frames are pinned, page fetch or page allocation fails
+
+### Current LRU behavior
+The current page cache uses a simple timestamp-based LRU policy.
+
+Current LRU tracking behavior:
+- each frame stores `last_used_tick`
+- `PageCacheManager` advances one global usage counter on page access
+- cache hits update the touched frame's usage tick
+- page loads into a frame update the new frame's usage tick
+- newly allocated pages also get a fresh usage tick
+- flush and unpin operations do not change recency
+
+### Current test-only helpers
+The current page cache exposes a small test-only helper:
+- `is_page_cached(page_id)` is only compiled when `DB_TESTING` is enabled
+- test targets define `DB_TESTING` through CMake
+- the helper is used to verify LRU eviction decisions without making the normal runtime API larger
+
+### Current page cache simplifications
+- no concurrency control
+- no latches
+- no background flushing
+- no explicit checkpointing policy yet
+- no clock policy or more advanced replacement tuning yet
+
+### Current durability limitation
+The current page cache uses write-back behavior, not crash-safe durability.
+
+Current limitation:
+- dirty pages can still be lost if power is lost before they are flushed
+- flushing on eviction or destruction helps normal shutdown behavior but does not protect against crashes
+- write-ahead logging and recovery are planned for a later phase
+
 ## Next likely storage upgrade
-After the current slotted page abstraction:
-- keep full scan lookup working through slots
-- later consider reclaiming deleted space
-- later decide how `HeapFile` should expose variable-length records
+After the first page cache layer:
+- add more tests around dirty-page write-back behavior
+- later consider whether a clock-style replacement policy is worth adding

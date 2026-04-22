@@ -2,7 +2,7 @@
 
 #include <optional>
 #include <string>
-#include "storage/disk/disk_manager.h"
+#include "storage/cache/page_cache_manager.h"
 #include "storage/page/page.h"
 #include "storage/page/slotted_page.h"
 #include "storage/page/record.h"
@@ -48,7 +48,7 @@ public:
     std::optional<RowId> update_var_record(const RowId& row_id, const VarRecord& record);
 
 private:
-    DiskManager disk_manager_;
+    PageCacheManager page_cache_manager_;
 
     // Try to insert a record into the given page using the slotted-page layout.
     // Returns the inserted slot index on success.

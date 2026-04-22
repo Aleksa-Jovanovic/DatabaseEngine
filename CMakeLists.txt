@@ -11,6 +11,7 @@ add_library(db_storage
     src/storage/heap/heap_file.cpp
     src/storage/page/slotted_page.cpp
     src/storage/page/var_record_serializer.cpp
+    src/storage/cache/page_cache_manager.cpp
 )
 
 target_include_directories(db_storage
@@ -32,6 +33,11 @@ function(add_db_test test_name test_source)
         ${test_source}
     )
 
+    target_compile_definitions(${test_name}
+        PRIVATE
+            DB_TESTING
+    )
+
     target_link_libraries(${test_name}
         PRIVATE
             db_storage
@@ -48,3 +54,4 @@ add_db_test(HeapFileTest tests/heap_file_test.cpp)
 add_db_test(HeapFileRowIdTest tests/heap_file_row_id_test.cpp)
 add_db_test(HeapFileVarRecordTest tests/heap_file_var_record_test.cpp)
 add_db_test(VarRecordSerializerTest tests/var_record_serializer_test.cpp)
+add_db_test(PageCacheManagerTest tests/page_cache_manager_test.cpp)
