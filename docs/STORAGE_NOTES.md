@@ -44,18 +44,20 @@ offset = page_id * PAGE_SIZE
 ## Current heap file behavior
 - if the file has no pages yet, allocate the first page
 - initialize a new page as a slotted page before first insert
-- read the last page and try to append through `SlottedPage`
+- fetch the last page through `PageCacheManager` and try to append through `SlottedPage`
 - if the last page is full, allocate a new page and insert there
 - fixed-size insert returns a `RowId` with `page_id` and `slot_index`
 - variable-length insert returns a `RowId` with `page_id` and `slot_index`
-- `get(row_id)` reads a fixed-size record directly by physical location
-- `get_var_record(row_id)` reads a variable-length record directly by physical location
+- `get(row_id)` fetches a cached page and reads a fixed-size record directly by physical location
+- `get_var_record(row_id)` fetches a cached page and reads a variable-length record directly by physical location
 - `delete_record(row_id)` performs logical deletion through the slotted page
 - `update_record(row_id, record)` updates a fixed-size record in place
 - `update_var_record(row_id, record)` may return a new `RowId` if the updated record moves to a new slot
 - `find(key)` scans all pages in order
 - each page scan walks through slot entries and reads records through the slot directory
-- data remains persisted in a page-based disk file through `DiskManager`
+- read and write operations now go through `PageCacheManager`
+- write operations currently flush immediately after successful mutation to preserve simple persistence behavior during the Phase 4 transition
+- data remains persisted in a page-based disk file through `DiskManager` underneath the page cache layer
 
 ## Current simplifications
 - no checksums
@@ -150,8 +152,8 @@ What is working now:
 - disk-backed heap-file `RowId` test passes with reopen/read verification
 - disk-backed heap-file variable-length test passes with reopen/read verification
 
-## Page cache work in progress
-Phase 4 has started with a first `PageCacheManager` abstraction.
+## Current page cache layer
+Phase 4 now has a first integrated `PageCacheManager` abstraction.
 
 Current page cache goal:
 - keep a fixed number of pages in memory
@@ -180,6 +182,13 @@ The current `PageCacheManager` can:
 - flush one cached page with `flush_page(page_id)`
 - flush all valid cached pages with `flush_all_pages()`
 
+Current `HeapFile` integration:
+- `HeapFile` now uses `PageCacheManager` instead of talking directly to `DiskManager`
+- heap-file reads fetch pages from the page cache and unpin them after access
+- heap-file writes mark cached pages dirty and then flush them immediately for now
+- existing heap-file tests pass after the page-cache migration
+- isolated `PageCacheManager` tests pass for persistence and pinned-frame behavior
+
 ### Current replacement behavior
 The first version does not implement a real replacement policy yet.
 
@@ -193,10 +202,10 @@ Current frame selection behavior:
 - no concurrency control
 - no latches
 - no background flushing
-- no `HeapFile` integration yet
+- write-back policy still lives partly in `HeapFile` because heap-file writes flush immediately after success
+- delayed flushing and replacement policy should later move more fully into `PageCacheManager`
 
 ## Next likely storage upgrade
 After the first page cache layer:
-- test cached page fetch and flush behavior in isolation
-- integrate `HeapFile` with `PageCacheManager`
+- reduce eager flushes in `HeapFile` and move more write-back policy into `PageCacheManager`
 - later add a real replacement policy

@@ -45,6 +45,11 @@ public:
     // Write all valid cached pages back to disk.
     void flush_all_pages();
 
+    // Return the current number of allocated logical pages.
+    inline std::uint32_t get_page_count() const {
+        return disk_manager_.get_page_count();
+    }
+
 private:
     std::optional<std::size_t> find_frame_for_page(std::uint32_t page_id) const;
     std::optional<std::size_t> find_available_frame();

@@ -2,7 +2,7 @@
 
 namespace db {
 
-HeapFile::HeapFile(const std::string& file_name) : disk_manager_(file_name) {}
+HeapFile::HeapFile(const std::string& file_name) : page_cache_manager_(file_name, 8) {}
 
 void HeapFile::initialize_new_page(Page& page) {
     SlottedPage slotted_page(page);
@@ -33,204 +33,299 @@ std::optional<std::uint16_t> HeapFile::try_insert_var_record_into_page(Page& pag
 
 std::optional<RowId> HeapFile::insert(const Record& record) {
     // If no pages exist yet, allocate the first heap page and insert into it.
-    if (disk_manager_.get_page_count() == 0) {
-        Page new_page{};
-        new_page.page_id = disk_manager_.allocate_page();
-
-        initialize_new_page(new_page);
-
-        auto slot_index = try_insert_into_page(new_page, record);
-        if (!slot_index.has_value()) {
+    if (page_cache_manager_.get_page_count() == 0) {
+        Page* new_page_ptr = page_cache_manager_.new_page();
+        if (new_page_ptr == nullptr) {
             return std::nullopt;
         }
 
-        disk_manager_.write_page(new_page.page_id, new_page.data.data());
-        return RowId{new_page.page_id, slot_index.value()};
-    }
+        initialize_new_page(*new_page_ptr);
 
-    const std::uint32_t last_page_id = disk_manager_.get_page_count() - 1;
-    Page page{};
-    page.page_id = last_page_id;
+        auto slot_index = try_insert_into_page(*new_page_ptr, record);
+        if (!slot_index.has_value()) {
+            // Dirty flag is true since the page has been initialized hence changed.
+            page_cache_manager_.unpin_page(new_page_ptr->page_id, true);
+            return std::nullopt;
+        }
+
+        const RowId row_id{new_page_ptr->page_id, slot_index.value()};
+        page_cache_manager_.unpin_page(new_page_ptr->page_id, true);
+        
+        // For now HeapFile flushes immediately after a successful write so behavior
+        // stays close to the old DiskManager-based version. Later, write-back policy
+        // should live inside PageCacheManager instead of being decided here.
+        if (!page_cache_manager_.flush_page(row_id.page_id)) {
+            return std::nullopt;
+        }
+
+        return row_id;
+    }
 
     // First try to append to the last page; if it is full, allocate a new page.
-    disk_manager_.read_page(last_page_id, page.data.data());
+    const std::uint32_t last_page_id = page_cache_manager_.get_page_count() - 1;
+    Page* page_ptr = page_cache_manager_.fetch_page(last_page_id);
+    if (page_ptr == nullptr) {
+        return std::nullopt;
+    }
     
-    auto slot_index = try_insert_into_page(page, record);
+    auto slot_index = try_insert_into_page(*page_ptr, record);
     if (slot_index.has_value()) {
-        disk_manager_.write_page(last_page_id, page.data.data());
-        return RowId{last_page_id, slot_index.value()};
+        const RowId row_id{page_ptr->page_id, slot_index.value()};
+        page_cache_manager_.unpin_page(last_page_id, true);
+
+        // For now HeapFile flushes immediately after a successful write so behavior
+        // stays close to the old DiskManager-based version. Later, write-back policy
+        // should live inside PageCacheManager instead of being decided here.
+        if (!page_cache_manager_.flush_page(last_page_id)) {
+            return std::nullopt;
+        }
+
+        return row_id;
     }
 
-    Page new_page{};
-    new_page.page_id = disk_manager_.allocate_page();
+    page_cache_manager_.unpin_page(last_page_id, false);
 
-    initialize_new_page(new_page);
-
-    slot_index = try_insert_into_page(new_page, record);
-    if (!slot_index.has_value()) {
+    // Allocate a new page if the last one is full
+    Page* new_page_ptr = page_cache_manager_.new_page();
+    if (new_page_ptr == nullptr) {
         return std::nullopt;
     }
 
-    disk_manager_.write_page(new_page.page_id, new_page.data.data());
-    return RowId{new_page.page_id, slot_index.value()};
+    initialize_new_page(*new_page_ptr);
+
+    slot_index = try_insert_into_page(*new_page_ptr, record);
+    if (!slot_index.has_value()) {
+        // Dirty flag is true since the page has been initialized hence changed.
+        page_cache_manager_.unpin_page(new_page_ptr->page_id, true);
+        return std::nullopt;
+    }
+
+    const RowId row_id{new_page_ptr->page_id, slot_index.value()};
+    page_cache_manager_.unpin_page(new_page_ptr->page_id, true);
+
+    // For now HeapFile flushes immediately after a successful write so behavior
+    // stays close to the old DiskManager-based version. Later, write-back policy
+    // should live inside PageCacheManager instead of being decided here.
+    if (!page_cache_manager_.flush_page(row_id.page_id)) {
+        return std::nullopt;
+    }
+
+    return row_id;
 }
 
 std::optional<RowId> HeapFile::insert_var_record(const VarRecord& record) {
     // If no pages exist yet, allocate the first heap page and insert into it.
-    if (disk_manager_.get_page_count() == 0) {
-        Page new_page{};
-        new_page.page_id = disk_manager_.allocate_page();
-
-        initialize_new_page(new_page);
-
-        auto slot_index = try_insert_var_record_into_page(new_page, record);
-        if (!slot_index.has_value()) {
+    if (page_cache_manager_.get_page_count() == 0) {
+        Page* new_page_ptr = page_cache_manager_.new_page();
+        if (new_page_ptr == nullptr) {
             return std::nullopt;
         }
 
-        disk_manager_.write_page(new_page.page_id, new_page.data.data());
-        return RowId{new_page.page_id, slot_index.value()};
+        initialize_new_page(*new_page_ptr);
+
+        auto slot_index = try_insert_var_record_into_page(*new_page_ptr, record);
+        if (!slot_index.has_value()) {
+            // Dirty flag is true since the page has been initialized and changed.
+            page_cache_manager_.unpin_page(new_page_ptr->page_id, true);
+            return std::nullopt;
+        }
+
+        const RowId row_id{new_page_ptr->page_id, slot_index.value()};
+        page_cache_manager_.unpin_page(new_page_ptr->page_id, true);
+
+        // For now HeapFile flushes immediately after a successful write so behavior
+        // stays close to the old DiskManager-based version. Later, write-back policy
+        // should live inside PageCacheManager instead of being decided here.
+        if (!page_cache_manager_.flush_page(row_id.page_id)) {
+            return std::nullopt;
+        }
+
+        return row_id;
     }
 
-    const std::uint32_t last_page_id = disk_manager_.get_page_count() - 1;
-    Page page{};
-    page.page_id = last_page_id;
-
-    disk_manager_.read_page(last_page_id, page.data.data());
-
-    auto slot_index = try_insert_var_record_into_page(page, record);
-    if (slot_index.has_value()) {
-        disk_manager_.write_page(last_page_id, page.data.data());
-        return RowId{last_page_id, slot_index.value()};
-    }
-
-    Page new_page{};
-    new_page.page_id = disk_manager_.allocate_page();
-
-    initialize_new_page(new_page);
-
-    slot_index = try_insert_var_record_into_page(new_page, record);
-    if (!slot_index.has_value()) {
+    // First try to append to the last page; if it is full, allocate a new page.
+    const std::uint32_t last_page_id = page_cache_manager_.get_page_count() - 1;
+    Page* page_ptr = page_cache_manager_.fetch_page(last_page_id);
+    if (page_ptr == nullptr) {
         return std::nullopt;
     }
 
-    disk_manager_.write_page(new_page.page_id, new_page.data.data());
-    return RowId{new_page.page_id, slot_index.value()}; 
+    auto slot_index = try_insert_var_record_into_page(*page_ptr, record);
+    if (slot_index.has_value()) {
+        const RowId row_id{page_ptr->page_id, slot_index.value()};
+        page_cache_manager_.unpin_page(last_page_id, true);
+
+        // For now HeapFile flushes immediately after a successful write so behavior
+        // stays close to the old DiskManager-based version. Later, write-back policy
+        // should live inside PageCacheManager instead of being decided here.
+        if (!page_cache_manager_.flush_page(last_page_id)) {
+            return std::nullopt;
+        }
+
+        return row_id;
+    }
+
+    page_cache_manager_.unpin_page(last_page_id, false);
+
+    // Allocate a new page if the last one is full.
+    Page* new_page_ptr = page_cache_manager_.new_page();
+    if (new_page_ptr == nullptr) {
+        return std::nullopt;
+    }
+
+    initialize_new_page(*new_page_ptr);
+
+    slot_index = try_insert_var_record_into_page(*new_page_ptr, record);
+    if (!slot_index.has_value()) {
+        // Dirty flag is true since the page has been initialized and changed.
+        page_cache_manager_.unpin_page(new_page_ptr->page_id, true);
+        return std::nullopt;
+    }
+
+    const RowId row_id{new_page_ptr->page_id, slot_index.value()};
+    page_cache_manager_.unpin_page(new_page_ptr->page_id, true);
+
+    // For now HeapFile flushes immediately after a successful write so behavior
+    // stays close to the old DiskManager-based version. Later, write-back policy
+    // should live inside PageCacheManager instead of being decided here.
+    if (!page_cache_manager_.flush_page(row_id.page_id)) {
+        return std::nullopt;
+    }
+
+    return row_id;
 }
 
 std::optional<Record> HeapFile::get(const RowId& row_id) {
-    if (row_id.page_id >= disk_manager_.get_page_count()) {
+    Page* page_ptr = page_cache_manager_.fetch_page(row_id.page_id);
+    if (page_ptr == nullptr) {
         return std::nullopt;
     }
 
-    Page page{};
-    page.page_id = row_id.page_id;
-    disk_manager_.read_page(row_id.page_id, page.data.data());
+    SlottedPage slotted_page(*page_ptr);
+    auto record = slotted_page.record_at(row_id.slot_index);
 
-    SlottedPage slotted_page(page);
-    return slotted_page.record_at(row_id.slot_index);
+    page_cache_manager_.unpin_page(row_id.page_id, false);
+    return record;
 }
 
 std::optional<VarRecord> HeapFile::get_var_record(const RowId& row_id) {
-    if (row_id.page_id >= disk_manager_.get_page_count()) {
+    Page* page_ptr = page_cache_manager_.fetch_page(row_id.page_id);
+    if (page_ptr == nullptr) {
         return std::nullopt;
     }
 
-    Page page{};
-    page.page_id = row_id.page_id;
-    disk_manager_.read_page(row_id.page_id, page.data.data());
+    SlottedPage slotted_page(*page_ptr);
+    auto record = slotted_page.var_record_at(row_id.slot_index);
 
-    SlottedPage slotted_page(page);
-    return slotted_page.var_record_at(row_id.slot_index);
+    page_cache_manager_.unpin_page(row_id.page_id, false);
+    return record;
 }
 
 std::optional<Record> HeapFile::find(std::uint32_t key) {
     // Heap file lookup is a full scan in the current version.
-    for (std::uint32_t page_id = 0; page_id < disk_manager_.get_page_count(); ++page_id) {
-        Page page{};
-        page.page_id = page_id;
-        disk_manager_.read_page(page_id, page.data.data());
+    for (std::uint32_t page_id = 0; page_id < page_cache_manager_.get_page_count(); ++page_id) {
+        Page* page_ptr = page_cache_manager_.fetch_page(page_id);
+        if (page_ptr == nullptr) {
+            continue;
+        }
 
-        SlottedPage slotted_page(page);
+        SlottedPage slotted_page(*page_ptr);
 
         for (std::uint16_t i = 0; i < slotted_page.slot_count(); ++i) {
             auto record = slotted_page.record_at(i);
             if (record.has_value() && record->key == key) {
+                page_cache_manager_.unpin_page(page_id, false);
                 return record;
             }
         }
+
+        page_cache_manager_.unpin_page(page_id, false);
     }
 
     return std::nullopt;
 }
 
 bool HeapFile::delete_record(const RowId& row_id) {
-    if (row_id.page_id >= disk_manager_.get_page_count()) {
+    Page* page_ptr = page_cache_manager_.fetch_page(row_id.page_id);
+    if (page_ptr == nullptr) {
         return false;
     }
 
-    Page page{};
-    page.page_id = row_id.page_id;
-    disk_manager_.read_page(row_id.page_id, page.data.data());
-
-    SlottedPage slotted_page(page);
+    SlottedPage slotted_page(*page_ptr);
     if (!slotted_page.delete_record(row_id.slot_index)) {
+        page_cache_manager_.unpin_page(row_id.page_id, false);
         return false;
     }
 
-    disk_manager_.write_page(row_id.page_id, page.data.data());
-    return true;
+    page_cache_manager_.unpin_page(row_id.page_id, true);
+    // For now HeapFile flushes immediately after a successful write so behavior
+    // stays close to the old DiskManager-based version. Later, write-back policy
+    // should live inside PageCacheManager instead of being decided here.
+    return page_cache_manager_.flush_page(row_id.page_id);
 }
 
 bool HeapFile::update_record(const RowId& row_id, const Record& record) {
-    if (row_id.page_id >= disk_manager_.get_page_count()) {
+    Page* page_ptr = page_cache_manager_.fetch_page(row_id.page_id);
+    if (page_ptr == nullptr) {
         return false;
     }
 
-    Page page{};
-    page.page_id = row_id.page_id;
-    disk_manager_.read_page(row_id.page_id, page.data.data());
-
-    SlottedPage slotted_page(page);
+    SlottedPage slotted_page(*page_ptr);
     if (!slotted_page.update_record(row_id.slot_index, record)) {
+        page_cache_manager_.unpin_page(row_id.page_id, false);
         return false;
     }
 
-    disk_manager_.write_page(row_id.page_id, page.data.data());
-    return true;
+    page_cache_manager_.unpin_page(row_id.page_id, true);
+
+    // For now HeapFile flushes immediately after a successful write so behavior
+    // stays close to the old DiskManager-based version. Later, write-back policy
+    // should live inside PageCacheManager instead of being decided here.
+    return page_cache_manager_.flush_page(row_id.page_id);
 }
 
 std::optional<RowId> HeapFile::update_var_record(const RowId& row_id, const VarRecord& record) {
-    if (row_id.page_id >= disk_manager_.get_page_count()) {
+    Page* page_ptr = page_cache_manager_.fetch_page(row_id.page_id);
+    if (page_ptr == nullptr) {
         return std::nullopt;
     }
 
-    Page page{};
-    page.page_id = row_id.page_id;
-    disk_manager_.read_page(row_id.page_id, page.data.data());
-
-    SlottedPage slotted_page(page);
+    SlottedPage slotted_page(*page_ptr);
 
     const auto* original_slot_entry = slotted_page.slot_at(row_id.slot_index);
     if (original_slot_entry == nullptr) {
+        page_cache_manager_.unpin_page(row_id.page_id, false);
         return std::nullopt;
     }
 
     const std::uint16_t original_length = original_slot_entry->length;
 
     if (!slotted_page.update_var_record(row_id.slot_index, record)) {
+        page_cache_manager_.unpin_page(row_id.page_id, false);
         return std::nullopt;
     }
 
-    disk_manager_.write_page(row_id.page_id, page.data.data());
+    std::optional<RowId> result = row_id;
 
     const auto* updated_slot_entry = slotted_page.slot_at(row_id.slot_index);
-    if (updated_slot_entry != nullptr && updated_slot_entry->length == original_length && updated_slot_entry->length != 0) {
-        return row_id;
+    if (updated_slot_entry == nullptr ||
+        updated_slot_entry->length != original_length ||
+        updated_slot_entry->length == 0) {
+        const std::uint16_t new_slot_index =
+            static_cast<std::uint16_t>(slotted_page.slot_count() - 1);
+        result = RowId{row_id.page_id, new_slot_index};
     }
 
-    const std::uint16_t new_slot_index = static_cast<std::uint16_t>(slotted_page.slot_count() - 1);
-    return RowId{row_id.page_id, new_slot_index};
+    page_cache_manager_.unpin_page(row_id.page_id, true);
+
+    // For now HeapFile flushes immediately after a successful write so behavior
+    // stays close to the old DiskManager-based version. Later, write-back policy
+    // should live inside PageCacheManager instead of being decided here.
+    if (!page_cache_manager_.flush_page(row_id.page_id)) {
+        return std::nullopt;
+    }
+
+    return result;
 }
 
 }  // namespace db
