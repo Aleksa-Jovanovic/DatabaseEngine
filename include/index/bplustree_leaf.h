@@ -27,6 +27,10 @@ public:
 
     std::uint16_t key_count() const;
     std::uint16_t max_size() const;
+    bool is_full() const;
+
+    const BPlusTreeLeafEntry* find_entry(std::uint32_t key) const;
+    bool insert_entry(std::uint32_t key, const RowId& row_id);
 
     BPlusTreeLeafEntry* entry_at(std::uint16_t index);
     const BPlusTreeLeafEntry* entry_at(std::uint16_t index) const;
@@ -44,6 +48,9 @@ private:
 
     BPlusTreeLeafEntry* entries();
     const BPlusTreeLeafEntry* entries() const;
+
+    std::int32_t find_key_index(std::uint32_t key) const;
+    std::uint16_t find_insert_position(std::uint32_t key) const;
 };
 
 }  // namespace db::index

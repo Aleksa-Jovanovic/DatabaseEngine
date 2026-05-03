@@ -43,6 +43,43 @@ std::uint16_t BPlusTreeLeafPage::max_size() const {
     return header->max_size;
 }
 
+bool BPlusTreeLeafPage::is_full() const {
+    return key_count() >= max_size();
+}
+
+const BPlusTreeLeafEntry* BPlusTreeLeafPage::find_entry(std::uint32_t key) const {
+    const std::int32_t index = find_key_index(key);
+    if (index < 0) {
+        return nullptr;
+    }
+
+    return entry_at(static_cast<std::uint16_t>(index));
+}
+
+bool BPlusTreeLeafPage::insert_entry(std::uint32_t key, const RowId& row_id) {
+    if (is_full()) {
+        return false;
+    }
+
+    // Do not add duplicate keys
+    if (find_key_index(key) >= 0) {
+        return false;
+    }
+
+    const std::uint16_t insert_index = find_insert_position(key);
+    BPlusTreeLeafEntry* leaf_entries = entries();
+
+    for (std::uint16_t i = key_count(); i > insert_index; --i) {
+        leaf_entries[i] = leaf_entries[i - 1];
+    }
+
+    leaf_entries[insert_index].key = key;
+    leaf_entries[insert_index].row_id = row_id;
+
+    ++fetch_header()->key_count;
+    return true;
+}
+
 BPlusTreeLeafEntry* BPlusTreeLeafPage::entry_at(std::uint16_t index) {
     if (index >= key_count()) {
         return nullptr;
@@ -89,6 +126,40 @@ const BPlusTreeLeafEntry* BPlusTreeLeafPage::entries() const {
     return reinterpret_cast<const BPlusTreeLeafEntry*>(
         data() + sizeof(BPlusTreePageHeader) + sizeof(std::uint32_t)
     );
+}
+
+std::int32_t BPlusTreeLeafPage::find_key_index(std::uint32_t key) const {
+    for (std::uint16_t i = 0; i < key_count(); ++i) {
+        const BPlusTreeLeafEntry* entry = entry_at(i);
+        if (entry == nullptr) {
+            return -1;
+        }
+
+        if (entry->key == key) {
+            return static_cast<std::int32_t>(i);
+        }
+
+        if (entry->key > key) {
+            break;
+        }
+    }
+
+    return -1;
+}
+
+std::uint16_t BPlusTreeLeafPage::find_insert_position(std::uint32_t key) const {
+    std::uint16_t i = 0;
+
+    while (i < key_count()) {
+        const BPlusTreeLeafEntry* entry = entry_at(i);
+        if (entry == nullptr || entry->key >= key) {
+            break;
+        }
+
+        ++i;
+    }
+
+    return i;
 }
 
 }  // namespace db::index

@@ -295,6 +295,10 @@ The current `BPlusTreeLeafPage` and `BPlusTreeInternalPage` wrappers can:
 - initialize page-specific pointer metadata
 - expose the common page header
 - expose leaf/internal entries by index
+- detect when a leaf page is full
+- search for a key inside one leaf page
+- insert one key and `RowId` into a leaf page in sorted order
+- reject duplicate leaf keys in the current simplified design
 - return `nullptr` for out-of-range `entry_at()` access
 
 ## Current test coverage
@@ -303,12 +307,14 @@ The current index page tests verify:
 - internal-page initialization
 - leaf/internal metadata getter and setter behavior
 - entry read/write access through page wrappers
+- leaf-page point lookup behavior
+- leaf-page sorted insertion behavior
+- duplicate-key rejection in one leaf page
+- full-page rejection in one leaf page
 - `entry_at()` returning `nullptr` when the index is out of range
 
 ## Not implemented yet
 The current indexing layer does not yet implement:
-- leaf-page search helpers
-- sorted insert into leaf pages
 - internal-page routing helpers
 - leaf or internal split logic
 - root-page management
