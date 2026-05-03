@@ -3,8 +3,8 @@
 namespace db::index {
 
 class BPlusTree {
- public:
-  BPlusTree() = default;
+public:
+    BPlusTree() = default;
 };
 
 }  // namespace db::index

@@ -7,6 +7,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_library(db_storage
+    src/index/bplustree.cpp
+    src/index/bplustree_leaf.cpp
+    src/index/bplustree_internal.cpp
     src/storage/disk/disk_manager.cpp
     src/storage/heap/heap_file.cpp
     src/storage/page/slotted_page.cpp
@@ -55,3 +58,5 @@ add_db_test(HeapFileRowIdTest tests/heap_file_row_id_test.cpp)
 add_db_test(HeapFileVarRecordTest tests/heap_file_var_record_test.cpp)
 add_db_test(VarRecordSerializerTest tests/var_record_serializer_test.cpp)
 add_db_test(PageCacheManagerTest tests/page_cache_manager_test.cpp)
+add_db_test(BPlusTreeLeafPageTest tests/index/bplustree_leaf_page_test.cpp)
+add_db_test(BPlusTreeInternalPageTest tests/index/bplustree_internal_page_test.cpp)
