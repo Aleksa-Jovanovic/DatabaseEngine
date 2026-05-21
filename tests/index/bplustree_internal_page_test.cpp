@@ -23,9 +23,9 @@ int main() {
     assert(internal_page.find_child_page_id(1) == 5);
     assert(internal_page.find_child_page_id(999) == 5);
 
-    assert(internal_page.insert_entry(20, 8));
-    assert(internal_page.insert_entry(10, 6));
-    assert(internal_page.insert_entry(30, 9));
+    assert(internal_page.insert_after_child(5, 20, 8));
+    assert(internal_page.insert_after_child(5, 10, 6));
+    assert(internal_page.insert_after_child(8, 30, 9));
 
     assert(internal_page.key_count() == 3);
     assert(internal_page.is_full());
@@ -55,8 +55,8 @@ int main() {
     assert(internal_page.find_child_page_id(30) == 9);
     assert(internal_page.find_child_page_id(35) == 9);
 
-    assert(!internal_page.insert_entry(20, 99));
-    assert(!internal_page.insert_entry(40, 10));
+    assert(!internal_page.insert_after_child(5, 20, 99));
+    assert(!internal_page.insert_after_child(9, 40, 10));
     assert(internal_page.entry_at(3) == nullptr);
 
     std::cout << "BPlusTreeInternalPage test passed.\n";

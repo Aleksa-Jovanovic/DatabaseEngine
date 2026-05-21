@@ -260,7 +260,7 @@ std::optional<RowId> BPlusTree::split_leaf_and_insert(std::uint32_t leaf_page_id
         new_root.initialize(4);
         new_root.set_leftmost_child_page_id(leaf_page_id);
 
-        if (!new_root.insert_entry(promoted_key, right_leaf_page_id)) {
+        if (!new_root.insert_after_child(leaf_page_id, promoted_key, right_leaf_page_id)) {
             page_cache_manager_.unpin_page(leaf_page_id, true);
             page_cache_manager_.unpin_page(right_leaf_page_id, true);
             page_cache_manager_.unpin_page(new_root_page_id, true);
@@ -295,7 +295,7 @@ std::optional<RowId> BPlusTree::split_leaf_and_insert(std::uint32_t leaf_page_id
         return std::nullopt;
     }
 
-    if (!parent_page.insert_entry(promoted_key, right_leaf_page_id)) {
+    if (!parent_page.insert_after_child(leaf_page_id, promoted_key, right_leaf_page_id)) {
         page_cache_manager_.unpin_page(leaf_page_id, true);
         page_cache_manager_.unpin_page(right_leaf_page_id, true);
         page_cache_manager_.unpin_page(parent_page_id, false);

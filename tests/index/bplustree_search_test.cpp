@@ -100,7 +100,7 @@ int main() {
             db::index::BPlusTreeInternalPage root_internal(*root_page);
             root_internal.initialize(4);
             root_internal.set_leftmost_child_page_id(left_leaf_page_id);
-            assert(root_internal.insert_entry(30, right_leaf_page_id));
+            assert(root_internal.insert_after_child(left_leaf_page_id, 30, right_leaf_page_id));
             assert(cache.unpin_page(root_page_id, true));
 
             cache.flush_all_pages();

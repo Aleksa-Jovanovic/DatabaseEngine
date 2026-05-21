@@ -33,13 +33,11 @@ void BPlusTreeInternalPage::set_leftmost_child_page_id(std::uint32_t page_id) {
 
 std::uint16_t BPlusTreeInternalPage::key_count() const {
     const BPlusTreePageHeader* header = fetch_header();
-
     return header->key_count;
 }
 
 std::uint16_t BPlusTreeInternalPage::max_size() const {
     const BPlusTreePageHeader* header = fetch_header();
-
     return header->max_size;
 }
 
@@ -82,17 +80,27 @@ std::uint32_t BPlusTreeInternalPage::find_child_page_id(std::uint32_t key) const
     return candidate;
 }
 
-bool BPlusTreeInternalPage::insert_entry(std::uint32_t key, std::uint32_t right_child_page_id) {
+bool BPlusTreeInternalPage::insert_after_child(
+    std::uint32_t left_child_page_id,
+    std::uint32_t key,
+    std::uint32_t right_child_page_id
+) {
     if (is_full()) {
         return false;
     }
 
-    // Do not add duplicate keys.
     if (find_key_index(key) >= 0) {
         return false;
     }
 
-    const std::uint16_t insert_index = find_insert_position(key);
+    const std::int32_t child_index = find_child_index(left_child_page_id);
+    if (child_index < 0) {
+        return false;
+    }
+
+    // Child position 0 means insert before the first separator entry.
+    // Child position i means insert at entry slot i.
+    const std::uint16_t insert_index = static_cast<std::uint16_t>(child_index);
     BPlusTreeInternalEntry* internal_entries = entries();
 
     for (std::uint16_t i = key_count(); i > insert_index; --i) {
@@ -105,7 +113,6 @@ bool BPlusTreeInternalPage::insert_entry(std::uint32_t key, std::uint32_t right_
     ++fetch_header()->key_count;
     return true;
 }
-
 
 char* BPlusTreeInternalPage::data() {
     return page_.data.data();
@@ -158,19 +165,25 @@ std::int32_t BPlusTreeInternalPage::find_key_index(std::uint32_t key) const {
     return -1;
 }
 
-std::uint16_t BPlusTreeInternalPage::find_insert_position(std::uint32_t key) const {
-    std::uint16_t i = 0;
-
-    while (i < key_count()) {
-        const BPlusTreeInternalEntry* entry = entry_at(i);
-        if (entry == nullptr || entry->key >= key) {
-            break;
-        }
-
-        ++i;
+// Child position 0 means insert before the first separator entry.
+// Child position i means insert at entry slot i.
+std::int32_t BPlusTreeInternalPage::find_child_index(std::uint32_t child_page_id) const {
+    if (leftmost_child_page_id() == child_page_id) {
+        return 0;
     }
 
-    return i;
+    for (std::uint16_t i = 0; i < key_count(); ++i) {
+        const BPlusTreeInternalEntry* entry = entry_at(i);
+        if (entry == nullptr) {
+            return -1;
+        }
+
+        if (entry->right_child_page_id == child_page_id) {
+            return static_cast<std::int32_t>(i + 1);
+        }
+    }
+
+    return -1;
 }
 
 }  // namespace db::index

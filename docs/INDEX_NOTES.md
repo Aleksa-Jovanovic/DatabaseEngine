@@ -301,9 +301,22 @@ The current `BPlusTreeLeafPage` and `BPlusTreeInternalPage` wrappers can:
 - reject duplicate leaf keys in the current simplified design
 - detect when an internal page is full
 - route a search key to the correct child page inside one internal page
-- insert one separator key and right-child pointer into an internal page in sorted order
+- insert one separator key and right-child pointer into an internal page
+  relative to the child page that split
 - reject duplicate internal separator keys in the current simplified design
 - return `nullptr` for out-of-range `entry_at()` access
+
+### Current internal-page insertion convention
+The current internal-page wrapper now exposes:
+- `insert_after_child(left_child_page_id, key, right_child_page_id)`
+
+This means parent updates are expressed structurally as:
+- a known left child already exists in the page
+- a split promoted one separator key upward
+- a new right child must be placed immediately after that left child
+
+This is more precise than inserting only by key order because it preserves the
+child relationship that caused the parent update.
 
 ## Current implemented tree behavior
 The current `BPlusTree` implementation can:
@@ -321,6 +334,8 @@ The current `BPlusTree` implementation can:
 - insert into a non-root leaf while that leaf still has space
 - split a non-root leaf and insert the promoted separator into the parent
   internal page when that parent still has free space
+- update internal parents using a child-relative insert operation instead of
+  key-only insertion
 - reject duplicate keys through leaf-page insertion rules
 
 ## Current insert boundary
