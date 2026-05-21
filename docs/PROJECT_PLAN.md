@@ -62,6 +62,12 @@ policy for unpinned cached pages.
 Goal:
 Enable fast key-based lookup.
 
+Current status:
+Phase 5 is in progress.
+The project now has B+ tree page-layout definitions, leaf/internal page
+wrappers, local leaf-page search and sorted insert behavior, and local
+internal-page routing and sorted insert behavior with dedicated tests.
+
 ## Phase 6 - Table abstraction
 - table metadata
 - heap storage + indexes

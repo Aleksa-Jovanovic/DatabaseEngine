@@ -299,7 +299,21 @@ The current `BPlusTreeLeafPage` and `BPlusTreeInternalPage` wrappers can:
 - search for a key inside one leaf page
 - insert one key and `RowId` into a leaf page in sorted order
 - reject duplicate leaf keys in the current simplified design
+- detect when an internal page is full
+- route a search key to the correct child page inside one internal page
+- insert one separator key and right-child pointer into an internal page in sorted order
+- reject duplicate internal separator keys in the current simplified design
 - return `nullptr` for out-of-range `entry_at()` access
+
+## Current implemented tree behavior
+The current `BPlusTree` implementation can:
+- treat `INVALID_PAGE_ID` as an empty-tree root
+- start search from a configured root page id
+- inspect a page header to distinguish leaf vs internal nodes
+- traverse internal pages using `find_child_page_id(key)`
+- search a leaf page for a matching key
+- return the matching `RowId` when found
+- return `std::nullopt` when the key is missing or the tree is empty
 
 ## Current test coverage
 The current index page tests verify:
@@ -311,11 +325,17 @@ The current index page tests verify:
 - leaf-page sorted insertion behavior
 - duplicate-key rejection in one leaf page
 - full-page rejection in one leaf page
+- internal-page child routing behavior
+- internal-page sorted insertion behavior
+- duplicate-key rejection in one internal page
+- full-page rejection in one internal page
 - `entry_at()` returning `nullptr` when the index is out of range
+- empty-tree B+ tree search
+- single-leaf-root B+ tree search
+- internal-root B+ tree search across two child leaves
 
 ## Not implemented yet
 The current indexing layer does not yet implement:
-- internal-page routing helpers
 - leaf or internal split logic
 - root-page management
-- top-level B+ tree search or insert coordination
+- top-level B+ tree insert coordination
