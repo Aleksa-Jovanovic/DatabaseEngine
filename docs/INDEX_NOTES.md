@@ -312,6 +312,10 @@ The current `BPlusTree` implementation can:
 - inspect a page header to distinguish leaf vs internal nodes
 - traverse internal pages using `find_child_page_id(key)`
 - search a leaf page for a matching key
+- insert into an empty tree by creating a single leaf root
+- insert into a single leaf root while that root still has space
+- reject duplicate keys through leaf-page insertion rules
+- reject inserts that would require split handling not yet implemented
 - return the matching `RowId` when found
 - return `std::nullopt` when the key is missing or the tree is empty
 
@@ -334,8 +338,19 @@ The current index page tests verify:
 - single-leaf-root B+ tree search
 - internal-root B+ tree search across two child leaves
 
+## Current insert limitation
+The current tree-level insert path only supports the simplest cases:
+- empty tree
+- a single leaf root with remaining free capacity
+
+Current limitation:
+- no leaf split yet
+- no internal split yet
+- no promoted-key propagation yet
+- no root split yet
+
 ## Not implemented yet
 The current indexing layer does not yet implement:
 - leaf or internal split logic
 - root-page management
-- top-level B+ tree insert coordination
+- general top-level B+ tree insert coordination beyond the single-leaf-root case

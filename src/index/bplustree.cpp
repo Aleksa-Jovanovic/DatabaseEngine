@@ -52,4 +52,57 @@ std::optional<RowId> BPlusTree::search(std::uint32_t key) {
     }
 }
 
+std::optional<RowId> BPlusTree::insert(std::uint32_t key, const RowId& row_id) {
+    // First insert in an empty tree creates a single leaf root.
+    if (root_page_id_ == INVALID_PAGE_ID) {
+        Page* root_page = page_cache_manager_.new_page();
+        if (root_page == nullptr) {
+            return std::nullopt;
+        }
+
+        root_page_id_ = root_page->page_id;
+
+        BPlusTreeLeafPage leaf_page(*root_page);
+        leaf_page.initialize(4);
+
+        if (!leaf_page.insert_entry(key, row_id)) {
+            page_cache_manager_.unpin_page(root_page_id_, true);
+            return std::nullopt;
+        }
+
+        page_cache_manager_.unpin_page(root_page_id_, true);
+        return row_id;
+    }
+
+    Page* root_page = page_cache_manager_.fetch_page(root_page_id_);
+    if (root_page == nullptr) {
+        return std::nullopt;
+    }
+
+    const BPlusTreePageHeader* header = 
+        reinterpret_cast<const BPlusTreePageHeader*>(root_page->data.data());
+    
+    // For now only support insertion into a single leaf root.
+    if (header->page_type != BPlusTreePageType::Leaf) {
+        page_cache_manager_.unpin_page(root_page_id_, false);
+        return std::nullopt;
+    }
+
+    BPlusTreeLeafPage leaf_page(*root_page);
+
+    if (leaf_page.is_full()) {
+        page_cache_manager_.unpin_page(root_page_id_, false);
+        return std::nullopt;
+    }
+
+        if (!leaf_page.insert_entry(key, row_id)) {
+        page_cache_manager_.unpin_page(root_page_id_, false);
+        return std::nullopt;
+    }
+
+    page_cache_manager_.unpin_page(root_page_id_, true);
+    return row_id;
+}
+
+
 }  // namespace db::index
