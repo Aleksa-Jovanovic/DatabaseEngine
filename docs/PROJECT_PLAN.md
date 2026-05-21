@@ -67,8 +67,9 @@ Phase 5 is in progress.
 The project now has B+ tree page-layout definitions, leaf/internal page
 wrappers, local leaf-page search and sorted insert behavior, local
 internal-page routing and sorted insert behavior, and top-level B+ tree
-search plus the first simple insert path for an empty or single-leaf-root
-tree, all with dedicated tests or notes coverage.
+search plus insert support for an empty tree, a single leaf root, and the
+first root-leaf split into a new internal root, all with dedicated tests or
+notes coverage.
 
 ## Phase 6 - Table abstraction
 - table metadata
