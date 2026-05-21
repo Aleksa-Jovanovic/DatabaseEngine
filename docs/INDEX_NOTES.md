@@ -317,7 +317,26 @@ The current `BPlusTree` implementation can:
 - split a full root leaf into left and right leaf pages
 - create a new internal root after a root-leaf split
 - promote the first key of the new right leaf into the new internal root
+- descend through an existing internal root to find the correct target leaf
+- insert into a non-root leaf while that leaf still has space
+- split a non-root leaf and insert the promoted separator into the parent
+  internal page when that parent still has free space
 - reject duplicate keys through leaf-page insertion rules
+
+## Current insert boundary
+The current insert path now works for:
+- empty-tree insert
+- insert into a single leaf root
+- first root-leaf split into a new internal root
+- insert into an already multi-level tree
+- split of a non-root leaf when the parent internal page still has room
+
+The next important missing case is:
+- splitting a full internal page and propagating the split upward
+
+That means the current tree can grow past one leaf split under the root, but
+it still stops when a separator must be inserted into an already full internal
+node.
 - return the matching `RowId` when found
 - return `std::nullopt` when the key is missing or the tree is empty
 
