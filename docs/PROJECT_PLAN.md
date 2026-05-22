@@ -58,6 +58,8 @@ policy for unpinned cached pages.
 - search
 - insert
 - split pages
+- later improve indexing to support additional index types such as
+  non-unique indexes and non-integer keys
 
 Goal:
 Enable fast key-based lookup.
@@ -66,11 +68,11 @@ Current status:
 Phase 5 is in progress.
 The project now has B+ tree page-layout definitions, leaf/internal page
 wrappers, local leaf-page search and sorted insert behavior, local
-internal-page routing and sorted insert behavior, and top-level B+ tree
-search plus insert support for an empty tree, a single leaf root, the
-first root-leaf split into a new internal root, and leaf splits under an
-existing internal root when that parent still has free space, all with
-dedicated tests or notes coverage.
+internal-page routing and child-relative insert behavior, and top-level B+
+tree search plus insert support for an empty tree, a single leaf root, the
+first root-leaf split into a new internal root, non-root leaf splits,
+internal split propagation, and creation of a taller tree after an
+internal-root split, all with dedicated tests or notes coverage.
 
 ## Phase 6 - Table abstraction
 - table metadata

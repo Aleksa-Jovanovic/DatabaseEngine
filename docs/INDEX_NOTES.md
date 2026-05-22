@@ -336,6 +336,10 @@ The current `BPlusTree` implementation can:
   internal page when that parent still has free space
 - update internal parents using a child-relative insert operation instead of
   key-only insertion
+- split a full internal page and promote its middle separator upward
+- keep the promoted internal separator only in the parent, not in either split
+  child node
+- create a new root when an internal split reaches the top of the tree
 - reject duplicate keys through leaf-page insertion rules
 
 ## Current insert boundary
@@ -345,15 +349,16 @@ The current insert path now works for:
 - first root-leaf split into a new internal root
 - insert into an already multi-level tree
 - split of a non-root leaf when the parent internal page still has room
-
-The next important missing case is:
 - splitting a full internal page and propagating the split upward
+- creating a taller tree after an internal-root split
 
-That means the current tree can grow past one leaf split under the root, but
-it still stops when a separator must be inserted into an already full internal
-node.
-- return the matching `RowId` when found
-- return `std::nullopt` when the key is missing or the tree is empty
+Current simplifications:
+- fixed-size `uint32_t` keys
+- duplicate-key rejection
+- no delete path yet
+- no concurrency control
+- no WAL or recovery interaction
+- no range-scan API yet, although leaf pages are already linked for it
 
 ## Current test coverage
 The current index page tests verify:
@@ -377,6 +382,9 @@ The current index page tests verify:
 - top-level B+ tree insert into a single leaf root
 - duplicate rejection through the top-level insert path
 - root-leaf split followed by successful search through the new internal root
+- non-root leaf split absorbed by an internal root with free space
+- recursive internal split propagation through a full internal root
+- successful search after the tree grows taller through an internal-root split
 
 ## Current insert limitation
 The current tree-level insert path now supports:

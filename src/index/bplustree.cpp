@@ -16,6 +16,11 @@ struct TempLeafEntry {
     std::uint32_t key;
     RowId row_id;
 };
+
+struct TempInternalNode {
+    std::vector<std::uint32_t> keys;
+    std::vector<std::uint32_t> child_page_ids;
+};
 }
 
 BPlusTree::BPlusTree(const std::string& file_name, std::size_t cache_size)
@@ -163,6 +168,131 @@ std::optional<RowId> BPlusTree::insert_into_leaf(std::uint32_t leaf_page_id, std
     return row_id;
 }
 
+std::optional<RowId> BPlusTree::create_new_root(
+    std::uint32_t left_child_page_id,
+    std::uint32_t key,
+    std::uint32_t right_child_page_id,
+    const RowId& row_id
+) {
+    // A split reached the top of the tree, so create a fresh internal root
+    // above the two resulting child pages.
+    Page* new_root_page_ptr = page_cache_manager_.new_page();
+    if (new_root_page_ptr == nullptr) {
+        return std::nullopt;
+    }
+
+    const std::uint32_t new_root_page_id = new_root_page_ptr->page_id;
+
+    BPlusTreeInternalPage new_root(*new_root_page_ptr);
+    new_root.initialize(4);
+    new_root.set_leftmost_child_page_id(left_child_page_id);
+
+    if (!new_root.insert_after_child(left_child_page_id, key, right_child_page_id)) {
+        page_cache_manager_.unpin_page(new_root_page_id, true);
+        return std::nullopt;
+    }
+
+    Page* left_child_page_ptr = page_cache_manager_.fetch_page(left_child_page_id);
+    if (left_child_page_ptr == nullptr) {
+        page_cache_manager_.unpin_page(new_root_page_id, true);
+        return std::nullopt;
+    }
+
+    BPlusTreePageHeader* left_header = 
+        reinterpret_cast<BPlusTreePageHeader*>(left_child_page_ptr->data.data());
+    left_header->parent_page_id = new_root_page_id;
+
+    page_cache_manager_.unpin_page(left_child_page_id, true);
+
+    Page* right_child_page_ptr = page_cache_manager_.fetch_page(right_child_page_id);
+    if (right_child_page_ptr == nullptr) {
+        page_cache_manager_.unpin_page(new_root_page_id, true);
+        return std::nullopt;
+    }
+
+    BPlusTreePageHeader* right_header =
+        reinterpret_cast<BPlusTreePageHeader*>(right_child_page_ptr->data.data());
+    right_header->parent_page_id = new_root_page_id;
+
+    page_cache_manager_.unpin_page(right_child_page_id, true);
+    page_cache_manager_.unpin_page(new_root_page_id, true);
+
+    root_page_id_ = new_root_page_id;
+    return row_id;
+}
+
+std::optional<RowId> BPlusTree::insert_into_parent(
+    std::uint32_t parent_page_id,
+    std::uint32_t left_child_page_id,
+    std::uint32_t key,
+    std::uint32_t right_child_page_id,
+    const RowId& row_id
+) {
+    if (parent_page_id == INVALID_PAGE_ID) {
+        return create_new_root(left_child_page_id, key, right_child_page_id, row_id);
+    }
+
+    Page* parent_page_ptr = page_cache_manager_.fetch_page(parent_page_id);
+    if (parent_page_ptr == nullptr) {
+        return std::nullopt;
+    }
+
+    BPlusTreeInternalPage parent_page(*parent_page_ptr);
+    const bool parent_is_full = parent_page.is_full();
+
+    page_cache_manager_.unpin_page(parent_page_id, false);
+
+    if (!parent_is_full) {
+        // Re-fetch the parent for the write path after the read-only fullness check.
+        Page* writable_parent_page_ptr = page_cache_manager_.fetch_page(parent_page_id);
+        if (writable_parent_page_ptr == nullptr) {
+            return std::nullopt;
+        }
+
+        BPlusTreeInternalPage writable_parent(*writable_parent_page_ptr);
+        if (!writable_parent.insert_after_child(left_child_page_id, key, right_child_page_id)) {
+            page_cache_manager_.unpin_page(parent_page_id, false);
+            return std::nullopt;
+        }
+
+        page_cache_manager_.unpin_page(parent_page_id, true);
+        return row_id;
+    }
+
+    // If the parent is full, split it and continue pushing the promoted
+    // separator upward until some ancestor has room or a new root is created.
+    const auto split_result = split_internal_and_insert(
+        parent_page_id,
+        left_child_page_id,
+        key,
+        right_child_page_id
+    );
+    if (!split_result.has_value()) {
+        return std::nullopt;
+    }
+
+    Page* split_left_page_ptr = page_cache_manager_.fetch_page(split_result->left_page_id);
+    if (split_left_page_ptr == nullptr) {
+        return std::nullopt;
+    }
+
+    const BPlusTreePageHeader* left_header =
+        reinterpret_cast<const BPlusTreePageHeader*>(split_left_page_ptr->data.data());
+    const std::uint32_t grandparent_page_id = left_header->parent_page_id;
+
+    page_cache_manager_.unpin_page(split_result->left_page_id, false);
+
+    // The left split result remains in the original page id, so recurse upward
+    // using that page as the left child of the newly promoted separator.
+    return insert_into_parent(
+        grandparent_page_id,
+        split_result->left_page_id,
+        split_result->promoted_key,
+        split_result->right_page_id,
+        row_id
+    );
+}
+
 std::optional<RowId> BPlusTree::split_leaf_and_insert(std::uint32_t leaf_page_id, std::uint32_t key, const RowId& row_id) {
     Page* left_leaf_page_ptr = page_cache_manager_.fetch_page(leaf_page_id);
     if (left_leaf_page_ptr == nullptr) {
@@ -246,67 +376,176 @@ std::optional<RowId> BPlusTree::split_leaf_and_insert(std::uint32_t leaf_page_id
     // In a leaf split, the first key in the right leaf becomes the separator key.
     const std::uint32_t promoted_key = all_entries[split_index].key;
 
-    if (parent_page_id == INVALID_PAGE_ID) {
-        Page* new_root_page_ptr = page_cache_manager_.new_page();
-        if (new_root_page_ptr == nullptr) {
-            page_cache_manager_.unpin_page(leaf_page_id, true);
-            page_cache_manager_.unpin_page(right_leaf_page_id, true);
-            return std::nullopt;
-        }
-
-        const std::uint32_t new_root_page_id = new_root_page_ptr->page_id;
-
-        BPlusTreeInternalPage new_root(*new_root_page_ptr);
-        new_root.initialize(4);
-        new_root.set_leftmost_child_page_id(leaf_page_id);
-
-        if (!new_root.insert_after_child(leaf_page_id, promoted_key, right_leaf_page_id)) {
-            page_cache_manager_.unpin_page(leaf_page_id, true);
-            page_cache_manager_.unpin_page(right_leaf_page_id, true);
-            page_cache_manager_.unpin_page(new_root_page_id, true);
-            return std::nullopt;
-        }
-
-        left_leaf.fetch_header()->parent_page_id = new_root_page_id;
-        right_leaf.fetch_header()->parent_page_id = new_root_page_id;
-
-        page_cache_manager_.unpin_page(leaf_page_id, true);
-        page_cache_manager_.unpin_page(right_leaf_page_id, true);
-        page_cache_manager_.unpin_page(new_root_page_id, true);
-
-        root_page_id_ = new_root_page_id;
-        return row_id;
-    }
-
-    Page* parent_page_ptr = page_cache_manager_.fetch_page(parent_page_id);
-    if (parent_page_ptr == nullptr) {
-        page_cache_manager_.unpin_page(leaf_page_id, true);
-        page_cache_manager_.unpin_page(right_leaf_page_id, true);
-        return std::nullopt;
-    }
-
-    BPlusTreeInternalPage parent_page(*parent_page_ptr);
-
-    // Full internal-node split propagation is the next step, so stop here if the parent is full.
-    if (parent_page.is_full()) {
-        page_cache_manager_.unpin_page(leaf_page_id, true);
-        page_cache_manager_.unpin_page(right_leaf_page_id, true);
-        page_cache_manager_.unpin_page(parent_page_id, false);
-        return std::nullopt;
-    }
-
-    if (!parent_page.insert_after_child(leaf_page_id, promoted_key, right_leaf_page_id)) {
-        page_cache_manager_.unpin_page(leaf_page_id, true);
-        page_cache_manager_.unpin_page(right_leaf_page_id, true);
-        page_cache_manager_.unpin_page(parent_page_id, false);
-        return std::nullopt;
-    }
-
     page_cache_manager_.unpin_page(leaf_page_id, true);
     page_cache_manager_.unpin_page(right_leaf_page_id, true);
-    page_cache_manager_.unpin_page(parent_page_id, true);
 
-    return row_id;
+    return insert_into_parent(
+        parent_page_id,
+        leaf_page_id,
+        promoted_key,
+        right_leaf_page_id,
+        row_id
+    );
+}
+
+std::optional<BPlusTree::InternalInsertResult> BPlusTree::split_internal_and_insert(
+    std::uint32_t internal_page_id,
+    std::uint32_t left_child_page_id,
+    std::uint32_t key,
+    std::uint32_t right_child_page_id
+) {
+    Page* left_internal_page_ptr = page_cache_manager_.fetch_page(internal_page_id);
+    if (left_internal_page_ptr == nullptr) {
+        return std::nullopt;
+    }
+
+    BPlusTreeInternalPage left_internal(*left_internal_page_ptr);
+    const std::uint32_t parent_page_id = left_internal.fetch_header()->parent_page_id;
+
+    // Build one logical internal node in temporary vectors before splitting it.
+    TempInternalNode temp_node;
+    temp_node.keys.reserve(left_internal.key_count() + 1);
+    // An internal node always has one more child pointer than separator keys.
+    // After inserting one new separator, we need room for two extra children
+    // compared with the original key count.
+    temp_node.child_page_ids.reserve(left_internal.key_count() + 2);
+
+    // The first child lives outside the entry array in the leftmost-child field.
+    temp_node.child_page_ids.push_back(left_internal.leftmost_child_page_id());
+
+    for (std::uint16_t i = 0; i < left_internal.key_count(); ++i) {
+        const BPlusTreeInternalEntry* entry = left_internal.entry_at(i);
+        if (entry == nullptr) {
+            page_cache_manager_.unpin_page(internal_page_id, false);
+            return std::nullopt;
+        }
+
+        temp_node.keys.push_back(entry->key);
+        temp_node.child_page_ids.push_back(entry->right_child_page_id);
+    }
+
+    if (temp_node.keys.size() + 1 != temp_node.child_page_ids.size()) {
+        page_cache_manager_.unpin_page(internal_page_id, false);
+        return std::nullopt;
+    }
+
+    // Find the child that split so the promoted separator is inserted in the
+    // correct structural position, not just by key order.
+    auto child_it = std::find(
+        temp_node.child_page_ids.begin(),
+        temp_node.child_page_ids.end(),
+        left_child_page_id
+    );
+    if (child_it == temp_node.child_page_ids.end()) {
+        page_cache_manager_.unpin_page(internal_page_id, false);
+        return std::nullopt;
+    }
+
+    const std::size_t child_index = static_cast<std::size_t>(
+        std::distance(temp_node.child_page_ids.begin(), child_it)
+    );
+
+    // Insert the promoted separator immediately after the child that split.
+    temp_node.keys.insert(temp_node.keys.begin() + child_index, key);
+    temp_node.child_page_ids.insert(
+        temp_node.child_page_ids.begin() + child_index + 1,
+        right_child_page_id
+    );
+
+    Page* right_internal_page_ptr = page_cache_manager_.new_page();
+    if (right_internal_page_ptr == nullptr) {
+        page_cache_manager_.unpin_page(internal_page_id, false);
+        return std::nullopt;
+    }
+
+    const std::uint32_t right_internal_page_id = right_internal_page_ptr->page_id;
+
+    // Rebuild the original page as the left split result and create a new
+    // right internal page for the upper half.
+    left_internal.initialize(4);
+
+    BPlusTreeInternalPage right_internal(*right_internal_page_ptr);
+    right_internal.initialize(4);
+
+    // Both split internal nodes stay under the same parent. The promoted key
+    // itself will be inserted into that parent by the caller.
+    left_internal.fetch_header()->parent_page_id = parent_page_id;
+    right_internal.fetch_header()->parent_page_id = parent_page_id;
+
+    // The middle key is pushed up to the parent and removed from both children.
+    const std::size_t promote_index = temp_node.keys.size() / 2;
+    const std::uint32_t promoted_key = temp_node.keys[promote_index];
+
+    // The left split keeps every key strictly before the promoted separator.
+    left_internal.set_leftmost_child_page_id(temp_node.child_page_ids[0]);
+
+    for (std::size_t i = 0; i < promote_index; ++i) {
+        if (!left_internal.insert_after_child(
+                temp_node.child_page_ids[i],
+                temp_node.keys[i],
+                temp_node.child_page_ids[i + 1])) {
+            page_cache_manager_.unpin_page(internal_page_id, true);
+            page_cache_manager_.unpin_page(right_internal_page_id, true);
+            return std::nullopt;
+        }
+    }
+
+    // The first child to the right of the promoted key becomes the right page's
+    // new leftmost child pointer.
+    right_internal.set_leftmost_child_page_id(temp_node.child_page_ids[promote_index + 1]);
+
+    // The right split keeps every key strictly after the promoted separator.
+    for (std::size_t i = promote_index + 1; i < temp_node.keys.size(); ++i) {
+        if (!right_internal.insert_after_child(
+                temp_node.child_page_ids[i],
+                temp_node.keys[i],
+                temp_node.child_page_ids[i + 1])) {
+            page_cache_manager_.unpin_page(internal_page_id, true);
+            page_cache_manager_.unpin_page(right_internal_page_id, true);
+            return std::nullopt;
+        }
+    }
+
+    // Repoint every child kept in the left split to the original internal page.
+    for (std::size_t i = 0; i <= promote_index; ++i) {
+        Page* child_page_ptr = page_cache_manager_.fetch_page(temp_node.child_page_ids[i]);
+        if (child_page_ptr == nullptr) {
+            page_cache_manager_.unpin_page(internal_page_id, true);
+            page_cache_manager_.unpin_page(right_internal_page_id, true);
+            return std::nullopt;
+        }
+
+        BPlusTreePageHeader* child_header =
+            reinterpret_cast<BPlusTreePageHeader*>(child_page_ptr->data.data());
+        child_header->parent_page_id = internal_page_id;
+
+        page_cache_manager_.unpin_page(temp_node.child_page_ids[i], true);
+    }
+
+    // Repoint every child moved to the right split to the new internal page.
+    for (std::size_t i = promote_index + 1; i < temp_node.child_page_ids.size(); ++i) {
+        Page* child_page_ptr = page_cache_manager_.fetch_page(temp_node.child_page_ids[i]);
+        if (child_page_ptr == nullptr) {
+            page_cache_manager_.unpin_page(internal_page_id, true);
+            page_cache_manager_.unpin_page(right_internal_page_id, true);
+            return std::nullopt;
+        }
+
+        BPlusTreePageHeader* child_header =
+            reinterpret_cast<BPlusTreePageHeader*>(child_page_ptr->data.data());
+        child_header->parent_page_id = right_internal_page_id;
+
+        page_cache_manager_.unpin_page(temp_node.child_page_ids[i], true);
+    }
+
+    page_cache_manager_.unpin_page(internal_page_id, true);
+    page_cache_manager_.unpin_page(right_internal_page_id, true);
+
+    return InternalInsertResult{
+        promoted_key,
+        internal_page_id,
+        right_internal_page_id
+    };
 }
 
 
