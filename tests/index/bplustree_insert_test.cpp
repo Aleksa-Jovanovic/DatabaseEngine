@@ -227,6 +227,34 @@ int main() {
         assert(!missing_after_internal_split.has_value());
     }
 
+    {
+        db::index::BPlusTree reopened_tree(file_name, 8);
+
+        auto found_10 = reopened_tree.search(10);
+        auto found_25 = reopened_tree.search(25);
+        auto found_45 = reopened_tree.search(45);
+        auto found_65 = reopened_tree.search(65);
+        auto missing_after_reopen = reopened_tree.search(9999);
+
+        assert(found_10.has_value());
+        assert(found_10->page_id == 1);
+        assert(found_10->slot_index == 1);
+
+        assert(found_25.has_value());
+        assert(found_25->page_id == 5);
+        assert(found_25->slot_index == 4);
+
+        assert(found_45.has_value());
+        assert(found_45->page_id == 7);
+        assert(found_45->slot_index == 6);
+
+        assert(found_65.has_value());
+        assert(found_65->page_id == 14);
+        assert(found_65->slot_index == 13);
+
+        assert(!missing_after_reopen.has_value());
+    }
+
     std::filesystem::remove(file_name);
 
     std::cout << "BPlusTree insert test passed.\n";

@@ -9,9 +9,18 @@
 
 namespace db::index {
 
-// Keep this helper local to this translation unit because it is only used
-// while rebuilding a split root leaf into two leaf pages.
 namespace {
+// A fixed signature stored in page 0 so reopen logic can verify that the page
+// really contains B+ tree metadata instead of zero-filled or unrelated bytes.
+constexpr std::uint32_t BPLUS_TREE_METADATA_PAGE_ID = 0;
+constexpr std::uint32_t BPLUS_TREE_METADATA_MAGIC = 0x42505452;  // "BPTR"
+
+struct BPlusTreeMetadataPage {
+    // Identifies this page as initialized B+ tree metadata.
+    std::uint32_t magic;
+    std::uint32_t root_page_id;
+};
+
 struct TempLeafEntry {
     std::uint32_t key;
     RowId row_id;
@@ -24,7 +33,88 @@ struct TempInternalNode {
 }
 
 BPlusTree::BPlusTree(const std::string& file_name, std::size_t cache_size)
-    : page_cache_manager_(file_name, cache_size) {}
+    : page_cache_manager_(file_name, cache_size) {
+    if (!load_or_initialize_metadata_page()) {
+        root_page_id_ = INVALID_PAGE_ID;
+    }
+}
+
+bool BPlusTree::load_or_initialize_metadata_page() {
+    if (page_cache_manager_.get_page_count() == 0) {
+        Page* metadata_page_ptr = page_cache_manager_.new_page();
+        if (metadata_page_ptr == nullptr) {
+            root_page_id_ = INVALID_PAGE_ID;
+            return false;
+        }
+
+        auto* metadata =
+            reinterpret_cast<BPlusTreeMetadataPage*>(metadata_page_ptr->data.data());
+        metadata->magic = BPLUS_TREE_METADATA_MAGIC;
+        metadata->root_page_id = INVALID_PAGE_ID;
+        root_page_id_ = INVALID_PAGE_ID;
+
+        page_cache_manager_.unpin_page(BPLUS_TREE_METADATA_PAGE_ID, true);
+        return true;
+    }
+
+    Page* metadata_page_ptr = page_cache_manager_.fetch_page(BPLUS_TREE_METADATA_PAGE_ID);
+    if (metadata_page_ptr == nullptr) {
+        root_page_id_ = INVALID_PAGE_ID;
+        return false;
+    }
+
+    const auto* metadata =
+        reinterpret_cast<const BPlusTreeMetadataPage*>(metadata_page_ptr->data.data());
+
+    // Refuse to trust the stored root page id unless page 0 has our expected
+    // metadata signature.
+    if (metadata->magic != BPLUS_TREE_METADATA_MAGIC) {
+        page_cache_manager_.unpin_page(BPLUS_TREE_METADATA_PAGE_ID, false);
+        root_page_id_ = INVALID_PAGE_ID;
+        return false;
+    }
+
+    root_page_id_ = metadata->root_page_id;
+    page_cache_manager_.unpin_page(BPLUS_TREE_METADATA_PAGE_ID, false);
+    return true;
+}
+
+bool BPlusTree::persist_root_page_id() {
+    Page* metadata_page_ptr = page_cache_manager_.fetch_page(BPLUS_TREE_METADATA_PAGE_ID);
+    if (metadata_page_ptr == nullptr) {
+        return false;
+    }
+
+    auto* metadata =
+        reinterpret_cast<BPlusTreeMetadataPage*>(metadata_page_ptr->data.data());
+    // Only overwrite page 0 when it is already recognized as our metadata page.
+    if (metadata->magic != BPLUS_TREE_METADATA_MAGIC) {
+        page_cache_manager_.unpin_page(BPLUS_TREE_METADATA_PAGE_ID, false);
+        return false;
+    }
+
+    metadata->magic = BPLUS_TREE_METADATA_MAGIC;
+    metadata->root_page_id = root_page_id_;
+
+    page_cache_manager_.unpin_page(BPLUS_TREE_METADATA_PAGE_ID, true);
+    return true;
+}
+
+std::uint16_t BPlusTree::leaf_node_max_size() const {
+    constexpr std::size_t header_bytes =
+        sizeof(BPlusTreePageHeader) + sizeof(std::uint32_t);
+    return static_cast<std::uint16_t>(
+        (PAGE_SIZE - header_bytes) / sizeof(BPlusTreeLeafEntry)
+    );
+}
+
+std::uint16_t BPlusTree::internal_node_max_size() const {
+    constexpr std::size_t header_bytes =
+        sizeof(BPlusTreePageHeader) + sizeof(std::uint32_t);
+    return static_cast<std::uint16_t>(
+        (PAGE_SIZE - header_bytes) / sizeof(BPlusTreeInternalEntry)
+    );
+}
 
 std::optional<RowId> BPlusTree::search(std::uint32_t key) {
     if (root_page_id_ == INVALID_PAGE_ID) {
@@ -105,7 +195,7 @@ std::optional<RowId> BPlusTree::create_initial_tree(std::uint32_t key, const Row
     root_page_id_ = root_page->page_id;
 
     BPlusTreeLeafPage leaf_page(*root_page);
-    leaf_page.initialize(4);
+    leaf_page.initialize(leaf_node_max_size());
 
     if (!leaf_page.insert_entry(key, row_id)) {
         page_cache_manager_.unpin_page(root_page_id_, true);
@@ -113,6 +203,10 @@ std::optional<RowId> BPlusTree::create_initial_tree(std::uint32_t key, const Row
     }
 
     page_cache_manager_.unpin_page(root_page_id_, true);
+    if (!persist_root_page_id()) {
+        return std::nullopt;
+    }
+
     return row_id;
 }
 
@@ -184,7 +278,7 @@ std::optional<RowId> BPlusTree::create_new_root(
     const std::uint32_t new_root_page_id = new_root_page_ptr->page_id;
 
     BPlusTreeInternalPage new_root(*new_root_page_ptr);
-    new_root.initialize(4);
+    new_root.initialize(internal_node_max_size());
     new_root.set_leftmost_child_page_id(left_child_page_id);
 
     if (!new_root.insert_after_child(left_child_page_id, key, right_child_page_id)) {
@@ -218,6 +312,10 @@ std::optional<RowId> BPlusTree::create_new_root(
     page_cache_manager_.unpin_page(new_root_page_id, true);
 
     root_page_id_ = new_root_page_id;
+    if (!persist_root_page_id()) {
+        return std::nullopt;
+    }
+
     return row_id;
 }
 
@@ -342,10 +440,10 @@ std::optional<RowId> BPlusTree::split_leaf_and_insert(std::uint32_t leaf_page_id
     const std::uint32_t right_leaf_page_id = right_leaf_page_ptr->page_id;
 
     // Reuse the original page as the left split result and build a new right leaf.
-    left_leaf.initialize(4);
+    left_leaf.initialize(leaf_node_max_size());
 
     BPlusTreeLeafPage right_leaf(*right_leaf_page_ptr);
-    right_leaf.initialize(4);
+    right_leaf.initialize(leaf_node_max_size());
 
     // Keep both split leaves attached to the same parent unless we create a new root below.
     left_leaf.fetch_header()->parent_page_id = parent_page_id;
@@ -462,10 +560,10 @@ std::optional<BPlusTree::InternalInsertResult> BPlusTree::split_internal_and_ins
 
     // Rebuild the original page as the left split result and create a new
     // right internal page for the upper half.
-    left_internal.initialize(4);
+    left_internal.initialize(internal_node_max_size());
 
     BPlusTreeInternalPage right_internal(*right_internal_page_ptr);
-    right_internal.initialize(4);
+    right_internal.initialize(internal_node_max_size());
 
     // Both split internal nodes stay under the same parent. The promoted key
     // itself will be inserted into that parent by the caller.

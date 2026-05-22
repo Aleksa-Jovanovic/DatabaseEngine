@@ -269,6 +269,12 @@ implemented.
 ## Current implemented page layouts
 The current page-wrapper implementation uses these byte layouts.
 
+Metadata page byte layout:
+- page `0` is reserved for B+ tree metadata
+- the metadata page currently stores:
+  - a fixed magic value used to recognize initialized metadata
+  - the persisted root page id
+
 Leaf page byte layout:
 - `| BPlusTreePageHeader | next_leaf_page_id | BPlusTreeLeafEntry[] |`
 
@@ -321,6 +327,8 @@ child relationship that caused the parent update.
 ## Current implemented tree behavior
 The current `BPlusTree` implementation can:
 - treat `INVALID_PAGE_ID` as an empty-tree root
+- reserve page `0` as a metadata page for root persistence
+- reload the persisted root page id when reopening the tree
 - start search from a configured root page id
 - inspect a page header to distinguish leaf vs internal nodes
 - traverse internal pages using `find_child_page_id(key)`
@@ -340,6 +348,7 @@ The current `BPlusTree` implementation can:
 - keep the promoted internal separator only in the parent, not in either split
   child node
 - create a new root when an internal split reaches the top of the tree
+- persist the new root page id whenever the tree root changes
 - reject duplicate keys through leaf-page insertion rules
 
 ## Current insert boundary
@@ -355,10 +364,23 @@ The current insert path now works for:
 Current simplifications:
 - fixed-size `uint32_t` keys
 - duplicate-key rejection
+- page `0` is dedicated to index metadata in the current file format
 - no delete path yet
 - no concurrency control
 - no WAL or recovery interaction
 - no range-scan API yet, although leaf pages are already linked for it
+
+## Current node sizing
+The current tree no longer hard-codes a tiny test-only node capacity.
+
+Leaf and internal node capacities are now computed from:
+- `PAGE_SIZE`
+- shared page-header bytes
+- page-type-specific entry size
+
+That means the current implementation still uses fixed-size entries, but the
+maximum number of entries per node is derived from the physical page layout
+instead of being manually set to a constant like `4`.
 
 ## Current test coverage
 The current index page tests verify:
@@ -385,20 +407,4 @@ The current index page tests verify:
 - non-root leaf split absorbed by an internal root with free space
 - recursive internal split propagation through a full internal root
 - successful search after the tree grows taller through an internal-root split
-
-## Current insert limitation
-The current tree-level insert path now supports:
-- empty tree creation
-- insert into a single leaf root with remaining capacity
-- root-leaf split into a new two-level tree
-
-Current limitation:
-- no internal split yet
-- no recursive promoted-key propagation above the first new root
-- no insert into an already multi-level tree
-
-## Not implemented yet
-The current indexing layer does not yet implement:
-- leaf or internal split logic
-- root-page management
-- general top-level B+ tree insert coordination beyond the first root-leaf split
+- reopened-tree lookup using the persisted root page id

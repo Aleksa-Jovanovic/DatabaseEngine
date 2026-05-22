@@ -2,10 +2,31 @@
 #include <filesystem>
 #include <iostream>
 
+#include "common/constants.h"
 #include "index/bplustree.h"
 #include "index/bplustree_internal.h"
 #include "index/bplustree_leaf.h"
 #include "storage/cache/page_cache_manager.h"
+
+namespace {
+
+std::uint16_t leaf_node_max_size() {
+    constexpr std::size_t header_bytes =
+        sizeof(db::index::BPlusTreePageHeader) + sizeof(std::uint32_t);
+    return static_cast<std::uint16_t>(
+        (db::PAGE_SIZE - header_bytes) / sizeof(db::index::BPlusTreeLeafEntry)
+    );
+}
+
+std::uint16_t internal_node_max_size() {
+    constexpr std::size_t header_bytes =
+        sizeof(db::index::BPlusTreePageHeader) + sizeof(std::uint32_t);
+    return static_cast<std::uint16_t>(
+        (db::PAGE_SIZE - header_bytes) / sizeof(db::index::BPlusTreeInternalEntry)
+    );
+}
+
+}  // namespace
 
 int main() {
     const std::string file_name = "bplustree_search_test.db";
@@ -23,6 +44,10 @@ int main() {
         std::uint32_t root_page_id = db::index::INVALID_PAGE_ID;
 
         {
+            db::index::BPlusTree bootstrap_tree(file_name, 8);
+        }
+
+        {
             db::PageCacheManager cache(file_name, 8);
 
             db::Page* root_page = cache.new_page();
@@ -30,7 +55,7 @@ int main() {
 
             root_page_id = root_page->page_id;
             db::index::BPlusTreeLeafPage leaf_page(*root_page);
-            leaf_page.initialize(4);
+            leaf_page.initialize(leaf_node_max_size());
 
             assert(leaf_page.insert_entry(10, db::RowId{1, 0}));
             assert(leaf_page.insert_entry(20, db::RowId{2, 1}));
@@ -71,6 +96,10 @@ int main() {
         std::uint32_t root_page_id = db::index::INVALID_PAGE_ID;
 
         {
+            db::index::BPlusTree bootstrap_tree(file_name, 8);
+        }
+
+        {
             db::PageCacheManager cache(file_name, 8);
 
             db::Page* left_leaf_page = cache.new_page();
@@ -78,7 +107,7 @@ int main() {
             left_leaf_page_id = left_leaf_page->page_id;
 
             db::index::BPlusTreeLeafPage left_leaf(*left_leaf_page);
-            left_leaf.initialize(4);
+            left_leaf.initialize(leaf_node_max_size());
             assert(left_leaf.insert_entry(10, db::RowId{1, 0}));
             assert(left_leaf.insert_entry(20, db::RowId{2, 1}));
             assert(cache.unpin_page(left_leaf_page_id, true));
@@ -88,7 +117,7 @@ int main() {
             right_leaf_page_id = right_leaf_page->page_id;
 
             db::index::BPlusTreeLeafPage right_leaf(*right_leaf_page);
-            right_leaf.initialize(4);
+            right_leaf.initialize(leaf_node_max_size());
             assert(right_leaf.insert_entry(30, db::RowId{3, 2}));
             assert(right_leaf.insert_entry(40, db::RowId{4, 3}));
             assert(cache.unpin_page(right_leaf_page_id, true));
@@ -98,7 +127,7 @@ int main() {
             root_page_id = root_page->page_id;
 
             db::index::BPlusTreeInternalPage root_internal(*root_page);
-            root_internal.initialize(4);
+            root_internal.initialize(internal_node_max_size());
             root_internal.set_leftmost_child_page_id(left_leaf_page_id);
             assert(root_internal.insert_after_child(left_leaf_page_id, 30, right_leaf_page_id));
             assert(cache.unpin_page(root_page_id, true));

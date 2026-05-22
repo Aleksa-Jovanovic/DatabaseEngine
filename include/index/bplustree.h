@@ -37,6 +37,18 @@ private:
     PageCacheManager page_cache_manager_;
     std::uint32_t root_page_id_ = INVALID_PAGE_ID;
 
+    // Load a persisted root page id or create the metadata page for a new file.
+    bool load_or_initialize_metadata_page();
+
+    // Write the current root page id into the fixed metadata page.
+    bool persist_root_page_id();
+
+    // Compute how many leaf entries fit in one physical page.
+    std::uint16_t leaf_node_max_size() const;
+
+    // Compute how many internal separator entries fit in one physical page.
+    std::uint16_t internal_node_max_size() const;
+
     // Create the first leaf root for an empty tree.
     std::optional<RowId> create_initial_tree(std::uint32_t key, const RowId& row_id);
 
