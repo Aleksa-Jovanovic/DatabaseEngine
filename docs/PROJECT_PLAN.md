@@ -86,9 +86,10 @@ Represent user data as tables rather than raw pages.
 Current status:
 Phase 6 is in progress.
 The project now has a first `Table` abstraction that combines one heap file
-with one primary B+ tree index and supports table-level insert, key-based
-lookup, and same-key update behavior for the current fixed-size `Record`
-model, all with initial integration-test coverage.
+with one primary B+ tree index, a lightweight `TableMetadata` structure for
+table configuration, and support for table-level insert, key-based lookup,
+and same-key update behavior for the current fixed-size `Record` model, all
+with initial integration-test coverage.
 
 ## Phase 7 - Catalog
 - schemas

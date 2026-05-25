@@ -7,13 +7,20 @@ Table::Table(
     const std::string& heap_file_name,
     const std::string& index_file_name,
     std::size_t cache_size
-)
-    : table_name_(table_name),
-    heap_file_(heap_file_name),
-    primary_index_(index_file_name, cache_size) {}
+): Table(TableMetadata{
+    table_name,
+    heap_file_name,
+    index_file_name,
+    cache_size
+}) {}
+
+Table::Table(const TableMetadata& metadata)
+    : metadata_(metadata),
+      heap_file_(metadata.heap_file_name, metadata.cache_size),
+      primary_index_(metadata.primary_index_file_name, metadata.cache_size) {}
 
 std::optional<RowId> Table::insert(const Record& record) {
-    // First isnert the full row into heap storage to get its physical location.
+    // First insert the full row into heap storage to get its physical location.
     const auto row_id = heap_file_.insert(record);
     if (!row_id.has_value()) {
         return std::nullopt;

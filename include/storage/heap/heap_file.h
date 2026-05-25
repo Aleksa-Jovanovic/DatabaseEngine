@@ -15,7 +15,7 @@ namespace db {
 // Records are appended to pages, and lookup is done by sequential scan.
 class HeapFile {
 public:
-    explicit HeapFile(const std::string& file_name);
+    explicit HeapFile(const std::string& file_name, std::size_t cache_size = 8);
 
     // Insert a record into an existing page or a newly allocated page.
     // Returns the physical row location of the inserted record.

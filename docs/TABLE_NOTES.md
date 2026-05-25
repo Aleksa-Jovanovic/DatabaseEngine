@@ -16,13 +16,19 @@ The current `Table` implementation combines:
 - one `HeapFile`
 - one primary `BPlusTree`
 
-The current constructor takes:
+The current table layer now also has a lightweight `TableMetadata` struct.
+
+Current metadata fields:
 - table name
 - heap file name
 - primary index file name
+- shared cache size
 
-This keeps the first Phase 6 version simple and avoids pulling full metadata
-management into the table layer before the later catalog phase.
+The current `Table` API still supports direct constructor arguments, but it
+also supports construction from `TableMetadata`.
+
+This keeps the first Phase 6 version simple while starting to group table
+configuration into one coherent object before the later catalog phase.
 
 ## Current row model
 The current table abstraction still uses the existing fixed-size `Record` type:
@@ -96,6 +102,17 @@ The current table integration test verifies:
 - same-key update behavior
 - rejection of primary-key-changing updates
 - persistence across reopen through heap and primary index files
+
+## Current cache-size behavior
+The current table metadata includes one shared cache-size value.
+
+That cache-size configuration is now passed consistently to:
+- the heap file
+- the primary B+ tree
+
+The current design does not yet distinguish between heap-cache size and
+index-cache size. If later workloads need different tuning, that can be split
+into separate configuration fields.
 
 ## Current simplifications
 - one heap file per table
