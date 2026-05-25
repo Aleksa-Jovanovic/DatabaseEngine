@@ -15,6 +15,7 @@ add_library(db_storage
     src/storage/page/slotted_page.cpp
     src/storage/page/var_record_serializer.cpp
     src/storage/cache/page_cache_manager.cpp
+    src/table/table.cpp
 )
 
 target_include_directories(db_storage
@@ -62,3 +63,4 @@ add_db_test(BPlusTreeLeafPageTest tests/index/bplustree_leaf_page_test.cpp)
 add_db_test(BPlusTreeInternalPageTest tests/index/bplustree_internal_page_test.cpp)
 add_db_test(BPlusTreeSearchTest tests/index/bplustree_search_test.cpp)
 add_db_test(BPlusTreeInsertTest tests/index/bplustree_insert_test.cpp)
+add_db_test(TableTest tests/table/table_test.cpp)
