@@ -58,8 +58,8 @@ policy for unpinned cached pages.
 - search
 - insert
 - split pages
-- later improve indexing to support additional index types such as
-  non-unique indexes and non-integer keys
+- later improve indexing to support additional index types, including
+  duplicate-key secondary indexes and non-integer keys such as strings
 
 Goal:
 Enable fast key-based lookup.
@@ -82,6 +82,13 @@ internal-root split, all with dedicated tests or notes coverage.
 
 Goal:
 Represent user data as tables rather than raw pages.
+
+Current status:
+Phase 6 is in progress.
+The project now has a first `Table` abstraction that combines one heap file
+with one primary B+ tree index and supports table-level insert, key-based
+lookup, and same-key update behavior for the current fixed-size `Record`
+model, all with initial integration-test coverage.
 
 ## Phase 7 - Catalog
 - schemas
