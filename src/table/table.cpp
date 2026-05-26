@@ -7,27 +7,30 @@ Table::Table(
     const std::string& heap_file_name,
     const std::string& index_file_name,
     std::size_t cache_size
-): Table(TableMetadata{
-    table_name,
-    heap_file_name,
-    index_file_name,
-    cache_size
-}) {}
+) : Table(TableMetadata{
+        table_name,
+        heap_file_name,
+        index_file_name,
+        cache_size
+    }) {}
 
 Table::Table(const TableMetadata& metadata)
     : metadata_(metadata),
       heap_file_(metadata.heap_file_name, metadata.cache_size),
       primary_index_(metadata.primary_index_file_name, metadata.cache_size) {}
 
-std::optional<RowId> Table::insert(const Record& record) {
+std::optional<RowId> Table::insert(const Row& row) {
+    // Bridge the logical table row into the current variable-length heap record shape.
+    VarRecord record{row.key, row.value};
+
     // First insert the full row into heap storage to get its physical location.
-    const auto row_id = heap_file_.insert(record);
+    const auto row_id = heap_file_.insert_var_record(record);
     if (!row_id.has_value()) {
         return std::nullopt;
     }
 
-    // Then index that physical row location by the record's primary key.
-    const auto index_result = primary_index_.insert(record.key, row_id.value());
+    // Then index that physical row location by the row's primary key.
+    const auto index_result = primary_index_.insert(row.key, row_id.value());
     if (!index_result.has_value()) {
         // For now, leave rollback out of scope and report failure if index insert fails.
         return std::nullopt;
@@ -36,22 +39,28 @@ std::optional<RowId> Table::insert(const Record& record) {
     return row_id;
 }
 
-std::optional<Record> Table::get_by_key(std::uint32_t key) {
+std::optional<Row> Table::get_by_key(std::uint32_t key) {
     // Resolve the key to a physical row location through the primary index first.
     const auto row_id = primary_index_.search(key);
     if (!row_id.has_value()) {
         return std::nullopt;
     }
 
-    // Then fetch the full row payload from the heap storage.
-    return heap_file_.get(row_id.value());
+    // Fetch the stored variable-length row payload from heap storage.
+    const auto record = heap_file_.get_var_record(row_id.value());
+    if (!record.has_value()) {
+        return std::nullopt;
+    }
+
+    // Convert the heap record back into the logical table row type.
+    return Row{record->key, record->value};
 }
 
-bool Table::update_by_key(std::uint32_t key, const Record& updated_record) {
+bool Table::update_by_key(std::uint32_t key, const Row& updated_row) {
     // For the current primary-index design, changing the key would require
     // removing the old index entry and inserting a new one.
     // Keep the first version simple and only allow same-key updates.
-    if (updated_record.key != key) {
+    if (updated_row.key != key) {
         return false;
     }
 
@@ -61,8 +70,27 @@ bool Table::update_by_key(std::uint32_t key, const Record& updated_record) {
         return false;
     }
 
-    // Update the heap row in place using the located RowId.
-    return heap_file_.update_record(row_id.value(), updated_record);
+    VarRecord updated_record{updated_row.key, updated_row.value};
+
+    // Update the heap row using the located RowId.
+    const auto updated_row_id =
+        heap_file_.update_var_record(row_id.value(), updated_record);
+
+    if (!updated_row_id.has_value()) {
+        return false;
+    }
+
+    // If the variable-length update moved the row, repair the index mapping.
+    if (updated_row_id.value().page_id != row_id->page_id ||
+        updated_row_id.value().slot_index != row_id->slot_index) {
+        const auto index_update_result =
+            primary_index_.update(key, updated_row_id.value());
+        if (!index_update_result.has_value()) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 bool Table::delete_by_key(std::uint32_t key) {
@@ -72,4 +100,4 @@ bool Table::delete_by_key(std::uint32_t key) {
     return false;
 }
 
-}   // namespace db::table
+}  // namespace db::table

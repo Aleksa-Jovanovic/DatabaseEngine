@@ -31,16 +31,21 @@ This keeps the first Phase 6 version simple while starting to group table
 configuration into one coherent object before the later catalog phase.
 
 ## Current row model
-The current table abstraction still uses the existing fixed-size `Record` type:
+The current table abstraction now uses a table-layer `Row` type:
 - `key`
-- `value`
+- `value` as `std::string`
 
-That means the current "full row" returned by the table layer is still the
-same simplified record used in earlier storage phases.
+The current row model is richer than the old fixed-size `Record`, but it is
+still intentionally simple and only represents:
+- one integer primary key
+- one variable-length string value
 
-This is a temporary row model for the first table abstraction milestone.
-Later phases may evolve this into a richer row representation with more fields
-or serialized variable-length payloads.
+The current table layer also has a `RowSerializer` with the byte layout:
+- `[key][value_length][value_bytes]`
+
+At the moment, the `Table` implementation still bridges through the existing
+`VarRecord` heap-storage path because that storage shape already matches the
+current `Row` model closely.
 
 ## Current lookup flow
 The current key-based table lookup works like this:
@@ -54,7 +59,8 @@ This keeps the architecture aligned with a normal heap-plus-index design:
 
 ## Current insert flow
 The current table insert works like this:
-1. insert the full record into the heap file
+1. convert the logical `Row` into the current variable-length heap record shape
+2. insert the full row into the heap file
 2. receive a `RowId` for the inserted row
 3. insert `key -> RowId` into the primary B+ tree
 
@@ -67,7 +73,8 @@ The current table layer has a first `update_by_key(...)` implementation.
 Current behavior:
 - resolve the key through the primary index
 - get the corresponding `RowId`
-- update the heap record in place
+- update the heap record through the variable-length storage path
+- repair the primary-index mapping if the updated row moves to a new `RowId`
 
 Current limitation:
 - only same-key updates are allowed
@@ -100,8 +107,15 @@ The current table integration test verifies:
 - table-level lookup by primary key
 - duplicate primary-key rejection through the table API
 - same-key update behavior
+- index repair when a variable-length update moves the row to a new physical location
 - rejection of primary-key-changing updates
 - persistence across reopen through heap and primary index files
+
+The current row-serialization test verifies:
+- serialize one `Row` into bytes
+- deserialize bytes back into one `Row`
+- empty-string round trip
+- invalid or truncated input rejection
 
 ## Current cache-size behavior
 The current table metadata includes one shared cache-size value.
@@ -117,8 +131,9 @@ into separate configuration fields.
 ## Current simplifications
 - one heap file per table
 - one active primary B+ tree index
-- fixed-size `Record` row model
+- simple `Row { key, value }` row model
 - `uint32_t` primary key
+- current heap bridge still reuses `VarRecord`
 - no schema-aware row representation yet
 - no secondary-index maintenance yet
 - no delete path yet

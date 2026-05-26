@@ -8,6 +8,7 @@
 
 #include "index/bplustree.h"
 #include "storage/heap/heap_file.h"
+#include "table/row.h"
 #include "table/table_metadata.h"
 
 namespace db::table {
@@ -23,9 +24,9 @@ public:
 
     explicit Table(const TableMetadata& metadata);
 
-    std::optional<RowId> insert(const Record& record);
-    std::optional<Record> get_by_key(std::uint32_t key);
-    bool update_by_key(std::uint32_t key, const Record& updated_record);
+    std::optional<RowId> insert(const Row& row);
+    std::optional<Row> get_by_key(std::uint32_t key);
+    bool update_by_key(std::uint32_t key, const Row& updated_row);
     bool delete_by_key(std::uint32_t key);
 
 private:
