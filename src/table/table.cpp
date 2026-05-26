@@ -17,7 +17,9 @@ Table::Table(
 Table::Table(const TableMetadata& metadata)
     : metadata_(metadata),
       heap_file_(metadata.heap_file_name, metadata.cache_size),
-      primary_index_(metadata.primary_index_file_name, metadata.cache_size) {}
+      primary_index_(metadata.primary_index_file_name, metadata.cache_size) {
+    load_secondary_indexes_from_metadata();
+}
 
 std::optional<RowId> Table::insert(const Row& row) {
     // Bridge the logical table row into the current variable-length heap record shape.
@@ -114,10 +116,8 @@ bool Table::add_secondary_index(
         return false;
     }
 
-    // Keep the first version narrow and only recognize the current table-row columns.
-    if (column_name != "key" && column_name != "value") {
-        return false;
-    }
+    // Keep registration forward-compatible. The current engine does not yet
+    // maintain arbitrary secondary indexes, but metadata can still describe them.
 
     // The current primary index already owns the primary-key path, so keep
     // secondary registration focused on non-primary indexes.
@@ -145,6 +145,39 @@ bool Table::add_secondary_index(
     });
 
     return true;
+}
+
+void Table::load_secondary_indexes_from_metadata() {
+    secondary_indexes_.clear();
+
+    for (const IndexMetadata& index_metadata : metadata_.secondary_indexes) {
+        if (index_metadata.index_name.empty() || index_metadata.file_name.empty()) {
+            continue;
+        }
+
+        // Ignore duplicate metadata entries so runtime index state stays
+        // one-to-one by index name.
+        if (secondary_indexes_.find(index_metadata.index_name) != secondary_indexes_.end()) {
+            continue;
+        }
+
+        // Keep metadata forward-compatible: allow any column name here even if
+        // the current engine cannot actively maintain or use that index yet.
+        auto tree = std::make_unique<index::BPlusTree>(
+            index_metadata.file_name,
+            metadata_.cache_size
+        );
+
+        SecondaryIndexInfo info{
+            index_metadata.index_name,
+            index_metadata.column_name,
+            index_metadata.file_name,
+            index_metadata.is_unique,
+            std::move(tree)
+        };
+
+        secondary_indexes_.emplace(index_metadata.index_name, std::move(info));
+    }
 }
 
 }  // namespace db::table
