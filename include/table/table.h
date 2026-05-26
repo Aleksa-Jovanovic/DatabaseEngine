@@ -29,9 +29,18 @@ public:
     bool update_by_key(std::uint32_t key, const Row& updated_row);
     bool delete_by_key(std::uint32_t key);
 
+    bool add_secondary_index(
+        const std::string& index_name,
+        const std::string& column_name,
+        const std::string& index_file_name
+    );
+
 private:
     struct SecondaryIndexInfo {
+        std::string index_name;
         std::string column_name;
+        std::string file_name;
+        bool is_unique;
         std::unique_ptr<index::BPlusTree> tree;
     };
 

@@ -100,4 +100,51 @@ bool Table::delete_by_key(std::uint32_t key) {
     return false;
 }
 
+bool Table::add_secondary_index(
+    const std::string& index_name,
+    const std::string& column_name,
+    const std::string& index_file_name
+) {
+    if (index_name.empty() || column_name.empty() || index_file_name.empty()) {
+        return false;
+    }
+
+    // Do not allow duplicate secondary-index names.
+    if (secondary_indexes_.find(index_name) != secondary_indexes_.end()) {
+        return false;
+    }
+
+    // Keep the first version narrow and only recognize the current table-row columns.
+    if (column_name != "key" && column_name != "value") {
+        return false;
+    }
+
+    // The current primary index already owns the primary-key path, so keep
+    // secondary registration focused on non-primary indexes.
+    auto tree = std::make_unique<index::BPlusTree>(
+        index_file_name,
+        metadata_.cache_size
+    );
+
+    SecondaryIndexInfo info{
+        index_name,
+        column_name,
+        index_file_name,
+        true,
+        std::move(tree)
+    };
+
+    secondary_indexes_.emplace(index_name, std::move(info));
+
+    metadata_.secondary_indexes.push_back(IndexMetadata{
+        index_name,
+        column_name,
+        index_file_name,
+        false,
+        true
+    });
+
+    return true;
+}
+
 }  // namespace db::table

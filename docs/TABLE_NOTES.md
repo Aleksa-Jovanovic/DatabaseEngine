@@ -23,6 +23,14 @@ Current metadata fields:
 - heap file name
 - primary index file name
 - shared cache size
+- a list of secondary-index metadata entries
+
+Current secondary-index metadata fields:
+- index name
+- column name
+- index file name
+- whether the index is primary
+- whether the index is unique
 
 The current `Table` API still supports direct constructor arguments, but it
 also supports construction from `TableMetadata`.
@@ -61,8 +69,8 @@ This keeps the architecture aligned with a normal heap-plus-index design:
 The current table insert works like this:
 1. convert the logical `Row` into the current variable-length heap record shape
 2. insert the full row into the heap file
-2. receive a `RowId` for the inserted row
-3. insert `key -> RowId` into the primary B+ tree
+3. receive a `RowId` for the inserted row
+4. insert `key -> RowId` into the primary B+ tree
 
 The current implementation does not yet attempt rollback if the heap insert
 succeeds but the index insert fails.
@@ -95,11 +103,24 @@ So a correct table-level delete path should wait until index delete behavior is
 available or until a deliberate temporary strategy is chosen.
 
 ## Current support for additional indexes
-The current `Table` class already has a future-facing structure for additional
-indexes keyed by column name.
+The current `Table` class now has a first explicit registration path for
+secondary indexes.
 
-However, only the primary index is currently active in behavior.
-Secondary index management is still deferred.
+Current `add_secondary_index(...)` behavior:
+- rejects empty index names, column names, or file names
+- rejects duplicate secondary-index names
+- only accepts the current table-row column names:
+  - `key`
+  - `value`
+- creates a `BPlusTree` for the registered secondary index
+- stores runtime secondary-index information in the table object
+- stores matching `IndexMetadata` entries in `TableMetadata`
+
+Current limitation:
+- secondary-index registration does not yet backfill existing rows
+- secondary indexes are not yet maintained during insert, update, or delete
+- the current uniqueness flag is still constrained by the existing B+ tree,
+  which currently rejects duplicate keys
 
 ## Current test coverage
 The current table integration test verifies:
@@ -135,6 +156,6 @@ into separate configuration fields.
 - `uint32_t` primary key
 - current heap bridge still reuses `VarRecord`
 - no schema-aware row representation yet
-- no secondary-index maintenance yet
+- no secondary-index backfill or maintenance yet
 - no delete path yet
 - no rollback if heap insert succeeds and index insert fails

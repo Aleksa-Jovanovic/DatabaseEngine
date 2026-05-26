@@ -87,10 +87,11 @@ Current status:
 Phase 6 is in progress.
 The project now has a first `Table` abstraction that combines one heap file
 with one primary B+ tree index, a lightweight `TableMetadata` structure for
-table configuration, a simple table-layer `Row` type plus row-serialization
-support, and support for table-level insert, key-based lookup, and same-key
-update behavior with index repair when variable-length row updates move the
-stored row, all with initial integration-test coverage.
+table configuration plus index metadata tracking, a simple table-layer `Row`
+type plus row-serialization support, support for table-level insert,
+key-based lookup, and same-key update behavior with index repair when
+variable-length row updates move the stored row, and a first secondary-index
+registration path, all with initial integration-test coverage.
 
 ## Phase 7 - Catalog
 - schemas
