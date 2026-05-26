@@ -8,6 +8,8 @@
 
 #include "index/bplustree.h"
 #include "storage/heap/heap_file.h"
+#include "table/row.h"
+#include "table/table_metadata.h"
 
 namespace db::table {
 
@@ -20,18 +22,29 @@ public:
         std::size_t cache_size = 8
     );
 
-    std::optional<RowId> insert(const Record& record);
-    std::optional<Record> get_by_key(std::uint32_t key);
-    bool update_by_key(std::uint32_t key, const Record& updated_record);
+    explicit Table(const TableMetadata& metadata);
+
+    std::optional<RowId> insert(const Row& row);
+    std::optional<Row> get_by_key(std::uint32_t key);
+    bool update_by_key(std::uint32_t key, const Row& updated_row);
     bool delete_by_key(std::uint32_t key);
+
+    bool add_secondary_index(
+        const std::string& index_name,
+        const std::string& column_name,
+        const std::string& index_file_name
+    );
 
 private:
     struct SecondaryIndexInfo {
+        std::string index_name;
         std::string column_name;
+        std::string file_name;
+        bool is_unique;
         std::unique_ptr<index::BPlusTree> tree;
     };
 
-    std::string table_name_;
+    TableMetadata metadata_;
     HeapFile heap_file_;
     index::BPlusTree primary_index_;
     std::unordered_map<std::string, SecondaryIndexInfo> secondary_indexes_;

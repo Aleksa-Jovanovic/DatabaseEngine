@@ -17,9 +17,9 @@ int main() {
         auto missing_before_insert = table.get_by_key(42);
         assert(!missing_before_insert.has_value());
 
-        auto row_id_1 = table.insert(db::Record{10, 100});
-        auto row_id_2 = table.insert(db::Record{20, 200});
-        auto row_id_3 = table.insert(db::Record{30, 300});
+        auto row_id_1 = table.insert(db::table::Row{10, "100"});
+        auto row_id_2 = table.insert(db::table::Row{20, "200"});
+        auto row_id_3 = table.insert(db::table::Row{30, "300"});
 
         assert(row_id_1.has_value());
         assert(row_id_2.has_value());
@@ -32,33 +32,39 @@ int main() {
 
         assert(found_10.has_value());
         assert(found_10->key == 10);
-        assert(found_10->value == 100);
+        assert(found_10->value == "100");
 
         assert(found_20.has_value());
         assert(found_20->key == 20);
-        assert(found_20->value == 200);
+        assert(found_20->value == "200");
 
         assert(found_30.has_value());
         assert(found_30->key == 30);
-        assert(found_30->value == 300);
+        assert(found_30->value == "300");
 
         assert(!missing.has_value());
 
         // Duplicate primary key should fail because the current B+ tree rejects duplicates.
-        auto duplicate_insert = table.insert(db::Record{20, 999});
+        auto duplicate_insert = table.insert(db::table::Row{20, "999"});
         assert(!duplicate_insert.has_value());
 
         // Same-key updates should succeed and be visible through indexed lookup.
-        auto update_result = table.update_by_key(20, db::Record{20, 999});
+        auto update_result = table.update_by_key(20, db::table::Row{20, "999"});
         assert(update_result);
+
+        auto relocation_update = table.update_by_key(
+            20,
+            db::table::Row{20, "this is a much longer string that should be more likely to move"}
+        );
+        assert(relocation_update);
 
         found_20 = table.get_by_key(20);
         assert(found_20.has_value());
         assert(found_20->key == 20);
-        assert(found_20->value == 999);
+        assert(found_20->value == "this is a much longer string that should be more likely to move");
 
         // Changing the primary key is out of scope for the first update path.
-        auto invalid_key_change = table.update_by_key(20, db::Record{21, 111});
+        auto invalid_key_change = table.update_by_key(20, db::table::Row{21, "111"});
         assert(!invalid_key_change);
     }
 
@@ -73,15 +79,15 @@ int main() {
 
         assert(found_10.has_value());
         assert(found_10->key == 10);
-        assert(found_10->value == 100);
+        assert(found_10->value == "100");
 
         assert(found_20.has_value());
         assert(found_20->key == 20);
-        assert(found_20->value == 999);
+        assert(found_20->value == "this is a much longer string that should be more likely to move");
 
         assert(found_30.has_value());
         assert(found_30->key == 30);
-        assert(found_30->value == 300);
+        assert(found_30->value == "300");
 
         assert(!missing.has_value());
     }

@@ -16,25 +16,44 @@ The current `Table` implementation combines:
 - one `HeapFile`
 - one primary `BPlusTree`
 
-The current constructor takes:
+The current table layer now also has a lightweight `TableMetadata` struct.
+
+Current metadata fields:
 - table name
 - heap file name
 - primary index file name
+- shared cache size
+- a list of secondary-index metadata entries
 
-This keeps the first Phase 6 version simple and avoids pulling full metadata
-management into the table layer before the later catalog phase.
+Current secondary-index metadata fields:
+- index name
+- column name
+- index file name
+- whether the index is primary
+- whether the index is unique
+
+The current `Table` API still supports direct constructor arguments, but it
+also supports construction from `TableMetadata`.
+
+This keeps the first Phase 6 version simple while starting to group table
+configuration into one coherent object before the later catalog phase.
 
 ## Current row model
-The current table abstraction still uses the existing fixed-size `Record` type:
+The current table abstraction now uses a table-layer `Row` type:
 - `key`
-- `value`
+- `value` as `std::string`
 
-That means the current "full row" returned by the table layer is still the
-same simplified record used in earlier storage phases.
+The current row model is richer than the old fixed-size `Record`, but it is
+still intentionally simple and only represents:
+- one integer primary key
+- one variable-length string value
 
-This is a temporary row model for the first table abstraction milestone.
-Later phases may evolve this into a richer row representation with more fields
-or serialized variable-length payloads.
+The current table layer also has a `RowSerializer` with the byte layout:
+- `[key][value_length][value_bytes]`
+
+At the moment, the `Table` implementation still bridges through the existing
+`VarRecord` heap-storage path because that storage shape already matches the
+current `Row` model closely.
 
 ## Current lookup flow
 The current key-based table lookup works like this:
@@ -48,9 +67,10 @@ This keeps the architecture aligned with a normal heap-plus-index design:
 
 ## Current insert flow
 The current table insert works like this:
-1. insert the full record into the heap file
-2. receive a `RowId` for the inserted row
-3. insert `key -> RowId` into the primary B+ tree
+1. convert the logical `Row` into the current variable-length heap record shape
+2. insert the full row into the heap file
+3. receive a `RowId` for the inserted row
+4. insert `key -> RowId` into the primary B+ tree
 
 The current implementation does not yet attempt rollback if the heap insert
 succeeds but the index insert fails.
@@ -61,7 +81,8 @@ The current table layer has a first `update_by_key(...)` implementation.
 Current behavior:
 - resolve the key through the primary index
 - get the corresponding `RowId`
-- update the heap record in place
+- update the heap record through the variable-length storage path
+- repair the primary-index mapping if the updated row moves to a new `RowId`
 
 Current limitation:
 - only same-key updates are allowed
@@ -82,11 +103,24 @@ So a correct table-level delete path should wait until index delete behavior is
 available or until a deliberate temporary strategy is chosen.
 
 ## Current support for additional indexes
-The current `Table` class already has a future-facing structure for additional
-indexes keyed by column name.
+The current `Table` class now has a first explicit registration path for
+secondary indexes.
 
-However, only the primary index is currently active in behavior.
-Secondary index management is still deferred.
+Current `add_secondary_index(...)` behavior:
+- rejects empty index names, column names, or file names
+- rejects duplicate secondary-index names
+- only accepts the current table-row column names:
+  - `key`
+  - `value`
+- creates a `BPlusTree` for the registered secondary index
+- stores runtime secondary-index information in the table object
+- stores matching `IndexMetadata` entries in `TableMetadata`
+
+Current limitation:
+- secondary-index registration does not yet backfill existing rows
+- secondary indexes are not yet maintained during insert, update, or delete
+- the current uniqueness flag is still constrained by the existing B+ tree,
+  which currently rejects duplicate keys
 
 ## Current test coverage
 The current table integration test verifies:
@@ -94,15 +128,34 @@ The current table integration test verifies:
 - table-level lookup by primary key
 - duplicate primary-key rejection through the table API
 - same-key update behavior
+- index repair when a variable-length update moves the row to a new physical location
 - rejection of primary-key-changing updates
 - persistence across reopen through heap and primary index files
+
+The current row-serialization test verifies:
+- serialize one `Row` into bytes
+- deserialize bytes back into one `Row`
+- empty-string round trip
+- invalid or truncated input rejection
+
+## Current cache-size behavior
+The current table metadata includes one shared cache-size value.
+
+That cache-size configuration is now passed consistently to:
+- the heap file
+- the primary B+ tree
+
+The current design does not yet distinguish between heap-cache size and
+index-cache size. If later workloads need different tuning, that can be split
+into separate configuration fields.
 
 ## Current simplifications
 - one heap file per table
 - one active primary B+ tree index
-- fixed-size `Record` row model
+- simple `Row { key, value }` row model
 - `uint32_t` primary key
+- current heap bridge still reuses `VarRecord`
 - no schema-aware row representation yet
-- no secondary-index maintenance yet
+- no secondary-index backfill or maintenance yet
 - no delete path yet
 - no rollback if heap insert succeeds and index insert fails

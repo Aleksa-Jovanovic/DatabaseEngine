@@ -186,6 +186,43 @@ std::optional<RowId> BPlusTree::insert(std::uint32_t key, const RowId& row_id) {
     return split_leaf_and_insert(leaf_page_id.value(), key, row_id);
 }
 
+std::optional<RowId> BPlusTree::update(std::uint32_t key, const RowId& row_id) {
+    const auto leaf_page_id = find_leaf_page_id(key);
+    if (!leaf_page_id.has_value()) {
+        return std::nullopt;
+    }
+
+    Page* leaf_page_ptr = page_cache_manager_.fetch_page(leaf_page_id.value());
+    if (leaf_page_ptr == nullptr) {
+        return std::nullopt;
+    }
+
+    BPlusTreeLeafPage leaf_page(*leaf_page_ptr);
+
+    for (std::uint16_t i = 0; i < leaf_page.key_count(); ++i) {
+        BPlusTreeLeafEntry* entry = leaf_page.entry_at(i);
+        if (entry == nullptr) {
+            page_cache_manager_.unpin_page(leaf_page_id.value(), false);
+            return std::nullopt;
+        }
+
+        if (entry->key == key) {
+            const RowId previous_row_id = entry->row_id;
+            entry->row_id = row_id;
+
+            page_cache_manager_.unpin_page(leaf_page_id.value(), true);
+            return previous_row_id;
+        }
+
+        if (entry->key > key) {
+            break;
+        }
+    }
+
+    page_cache_manager_.unpin_page(leaf_page_id.value(), false);
+    return std::nullopt;
+}
+
 std::optional<RowId> BPlusTree::create_initial_tree(std::uint32_t key, const RowId& row_id) {
     Page* root_page = page_cache_manager_.new_page();
     if (root_page == nullptr) {

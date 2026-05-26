@@ -2,7 +2,8 @@
 
 namespace db {
 
-HeapFile::HeapFile(const std::string& file_name) : page_cache_manager_(file_name, 8) {}
+HeapFile::HeapFile(const std::string& file_name, std::size_t cache_size)
+    : page_cache_manager_(file_name, cache_size) {}
 
 void HeapFile::initialize_new_page(Page& page) {
     SlottedPage slotted_page(page);

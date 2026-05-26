@@ -19,6 +19,7 @@ public:
 
     std::optional<RowId> search(std::uint32_t key);
     std::optional<RowId> insert(std::uint32_t key, const RowId& row_id);
+    std::optional<RowId> update(std::uint32_t key, const RowId& row_id);
 
 #ifdef DB_TESTING
     void set_root_page_id(std::uint32_t page_id) {
