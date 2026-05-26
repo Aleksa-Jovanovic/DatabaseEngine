@@ -48,6 +48,8 @@ private:
     HeapFile heap_file_;
     index::BPlusTree primary_index_;
     std::unordered_map<std::string, SecondaryIndexInfo> secondary_indexes_;
+
+    void load_secondary_indexes_from_metadata();
 };
 
 }  // namespace db::table

@@ -38,6 +38,10 @@ also supports construction from `TableMetadata`.
 This keeps the first Phase 6 version simple while starting to group table
 configuration into one coherent object before the later catalog phase.
 
+At the current end of Phase 6, this metadata is still in-memory only.
+Persisting table definitions and index definitions is intentionally deferred to
+the later catalog phase.
+
 ## Current row model
 The current table abstraction now uses a table-layer `Row` type:
 - `key`
@@ -109,16 +113,21 @@ secondary indexes.
 Current `add_secondary_index(...)` behavior:
 - rejects empty index names, column names, or file names
 - rejects duplicate secondary-index names
-- only accepts the current table-row column names:
-  - `key`
-  - `value`
 - creates a `BPlusTree` for the registered secondary index
 - stores runtime secondary-index information in the table object
 - stores matching `IndexMetadata` entries in `TableMetadata`
 
+Current metadata-load behavior:
+- reconstructs runtime secondary-index objects from `TableMetadata`
+- skips incomplete metadata entries with missing index names or file names
+- ignores duplicate secondary-index names during runtime load so index state
+  stays one-to-one by name
+
 Current limitation:
 - secondary-index registration does not yet backfill existing rows
 - secondary indexes are not yet maintained during insert, update, or delete
+- arbitrary column names can already appear in metadata, but that metadata is
+  still future-facing until broader index-key support exists
 - the current uniqueness flag is still constrained by the existing B+ tree,
   which currently rejects duplicate keys
 
@@ -159,3 +168,15 @@ into separate configuration fields.
 - no secondary-index backfill or maintenance yet
 - no delete path yet
 - no rollback if heap insert succeeds and index insert fails
+
+## Phase 6 checkpoint
+For the current project scope, Phase 6 now has:
+- a working table-layer API
+- metadata-based table construction
+- row serialization support
+- primary-index-backed insert and lookup
+- same-key update behavior with index repair on row relocation
+- first secondary-index metadata and registration scaffolding
+
+That is a good stopping point before moving into catalog/schema persistence in
+Phase 7.
