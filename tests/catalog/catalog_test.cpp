@@ -70,6 +70,22 @@ int main() {
     assert(!found_users->indexes[1].is_primary);
     assert(found_users->indexes[1].is_unique);
 
+    const auto built_metadata = catalog.build_table_metadata("users", 16);
+    assert(built_metadata.has_value());
+    assert(built_metadata->table_name == "users");
+    assert(built_metadata->heap_file_name == "users_heap.db");
+    assert(built_metadata->primary_index_file_name == "users_primary_index.db");
+    assert(built_metadata->cache_size == 16);
+
+    assert(built_metadata->secondary_indexes.size() == 1);
+    assert(built_metadata->secondary_indexes[0].index_name == "users_name_idx");
+    assert(built_metadata->secondary_indexes[0].column_name == "name");
+    assert(built_metadata->secondary_indexes[0].file_name == "users_name_index.db");
+    assert(!built_metadata->secondary_indexes[0].is_primary);
+    assert(built_metadata->secondary_indexes[0].is_unique);
+
+    assert(!catalog.build_table_metadata("missing_table").has_value());
+
     assert(!catalog.create_table(users_table));
 
     db::catalog::TableDefinition invalid_table{
@@ -80,9 +96,35 @@ int main() {
     };
     assert(!catalog.create_table(invalid_table));
 
+    db::catalog::Catalog missing_primary_catalog;
+    db::catalog::TableDefinition missing_primary_table{
+        "events",
+        db::catalog::Schema{},
+        "events_heap.db",
+        {
+            {
+                "events_name_idx",
+                "events",
+                "name",
+                "events_name_index.db",
+                false,
+                true
+            }
+        }
+    };
+
+    assert(missing_primary_catalog.create_table(missing_primary_table));
+    assert(!missing_primary_catalog.build_table_metadata("events").has_value());
+
     const db::catalog::CatalogMetadata& metadata = catalog.metadata();
     assert(metadata.tables.size() == 1);
     assert(metadata.tables[0].table_name == "users");
+
+    const auto opened_table = catalog.open_table("users", 32);
+    assert(opened_table != nullptr);
+
+    const auto missing_open = catalog.open_table("missing_table");
+    assert(missing_open == nullptr);
 
     std::cout << "Catalog test passed.\n";
     return 0;

@@ -103,6 +103,14 @@ initial integration-test coverage.
 Goal:
 Track database objects and schema.
 
+Current status:
+Phase 7 is in progress.
+The project now has a first in-memory catalog layer with schema metadata,
+catalog-level table and index definitions, a `Catalog` registry that can
+create and look up table definitions, and a bridge from catalog definitions
+into runtime `TableMetadata` plus `Table` reconstruction through
+`open_table(...)`.
+
 ## Phase 8 - SQL layer
 - tokenizer
 - parser
