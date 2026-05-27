@@ -105,11 +105,12 @@ Track database objects and schema.
 
 Current status:
 Phase 7 is in progress.
-The project now has a first in-memory catalog layer with schema metadata,
+The project now has a first catalog layer with schema metadata,
 catalog-level table and index definitions, a `Catalog` registry that can
-create and look up table definitions, and a bridge from catalog definitions
-into runtime `TableMetadata` plus `Table` reconstruction through
-`open_table(...)`.
+create and look up table definitions, a serializer-backed metadata file
+format for catalog persistence, reopen support for file-backed catalogs, and
+a bridge from catalog definitions into runtime `TableMetadata` plus `Table`
+reconstruction through `open_table(...)`.
 
 ## Phase 8 - SQL layer
 - tokenizer

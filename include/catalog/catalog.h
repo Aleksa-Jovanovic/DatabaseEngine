@@ -17,6 +17,9 @@ class Catalog {
 public:
     Catalog() = default;
     explicit Catalog(const CatalogMetadata& metadata);
+    // When a metadata file is provided, Catalog will try to rebuild its
+    // in-memory registry from that file on construction.
+    explicit Catalog(const std::string& metadata_file_name);
 
     bool create_table(const TableDefinition& table_definition);
     bool has_table(const std::string& table_name) const;
@@ -40,6 +43,8 @@ public:
 
 private:
     CatalogMetadata metadata_;
+    // Empty means this Catalog instance is purely in-memory for now.
+    std::string metadata_file_name_;
 
 #ifndef DB_TESTING
     std::optional<table::TableMetadata> build_table_metadata(
@@ -48,6 +53,8 @@ private:
     ) const;
 #endif
 
+    bool load_from_file();
+    bool save_to_file() const;
 };
 
 }  // namespace db::catalog

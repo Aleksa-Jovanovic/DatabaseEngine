@@ -56,7 +56,9 @@ At the catalog level, all table indexes now live in one `indexes` list.
 Primary indexes are identified by `is_primary = true`.
 
 ## Current Catalog behavior
-The current `Catalog` is still an in-memory registry.
+The current `Catalog` now supports both:
+- pure in-memory construction
+- file-backed construction from a catalog metadata file
 
 Current public behavior:
 - create a table definition
@@ -68,6 +70,12 @@ Current public behavior:
 Current validation:
 - duplicate table names are rejected
 - empty table names are rejected
+
+Current persistence behavior:
+- a file-backed catalog loads its metadata blob on construction
+- missing catalog file is treated as an empty catalog
+- `create_table(...)` persists immediately for file-backed catalogs
+- if a save fails during `create_table(...)`, the in-memory append is rolled back
 
 ## Current Table reconstruction flow
 The first important catalog-to-runtime bridge is now implemented.
@@ -82,6 +90,25 @@ Current flow:
 
 This is the current role of `Catalog::open_table(...)`.
 
+## Current serialization format
+Catalog metadata is now serialized through `CatalogSerializer`.
+
+Current serialized structure:
+- catalog magic number
+- catalog format version
+- number of tables
+- for each table:
+  - table name
+  - heap file name
+  - schema columns
+  - index definitions
+
+Current deserialization checks:
+- matching magic number
+- matching format version
+- valid column-type values
+- strict full-buffer consumption with no trailing garbage
+
 ## Current testing
 The current catalog test verifies:
 - table creation
@@ -93,10 +120,10 @@ The current catalog test verifies:
 - missing-table lookup and metadata-build failure behavior
 - missing-primary-index rejection during runtime metadata reconstruction
 - `open_table(...)` succeeds for known tables and fails for unknown ones
+- file-backed catalog metadata persists across reopen
+- reopened catalog can still reconstruct and open a known table
 
 ## Current limitations
-- catalog metadata is still in memory only
-- there is no persistent catalog file yet
 - there is no table drop or alter behavior yet
 - there is no validation yet for:
   - duplicate index names within one table
@@ -105,6 +132,8 @@ The current catalog test verifies:
   - multiple primary indexes
 - catalog currently bridges to the existing table runtime shape rather than to
   a fully catalog-driven runtime engine
+- persistence format versioning is still minimal and only handles one version
+- there is no explicit crash-safety or write-ahead logging for catalog writes
 
 ## Current phase boundary
 This is the first structural slice of Phase 7.
@@ -112,8 +141,6 @@ This is the first structural slice of Phase 7.
 The catalog now exists as:
 - a schema model
 - a metadata model
-- an in-memory registry
+- an in-memory and file-backed registry
 - a bridge into runtime table construction
-
-Persisting catalog metadata to disk is intentionally deferred to the next
-Phase 7 steps.
+- a first catalog serializer and reopen path

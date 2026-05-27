@@ -1,9 +1,13 @@
 #include <cassert>
+#include <filesystem>
 #include <iostream>
 
 #include "catalog/catalog.h"
 
 int main() {
+    const std::string catalog_file_name = "catalog_test.db";
+    std::filesystem::remove(catalog_file_name);
+
     db::catalog::Catalog catalog;
 
     db::catalog::Schema user_schema;
@@ -125,6 +129,28 @@ int main() {
 
     const auto missing_open = catalog.open_table("missing_table");
     assert(missing_open == nullptr);
+
+    {
+        db::catalog::Catalog persistent_catalog(catalog_file_name);
+        assert(persistent_catalog.create_table(users_table));
+        assert(persistent_catalog.has_table("users"));
+    }
+
+    {
+        db::catalog::Catalog reopened_catalog(catalog_file_name);
+        assert(reopened_catalog.has_table("users"));
+
+        const auto reopened_definition = reopened_catalog.find_table_definition("users");
+        assert(reopened_definition.has_value());
+        assert(reopened_definition->table_name == "users");
+        assert(reopened_definition->heap_file_name == "users_heap.db");
+        assert(reopened_definition->indexes.size() == 2);
+
+        const auto reopened_table = reopened_catalog.open_table("users", 24);
+        assert(reopened_table != nullptr);
+    }
+
+    std::filesystem::remove(catalog_file_name);
 
     std::cout << "Catalog test passed.\n";
     return 0;
