@@ -74,6 +74,9 @@ Current validation:
 Current persistence behavior:
 - a file-backed catalog loads its metadata blob on construction
 - missing catalog file is treated as an empty catalog
+- `create_table(...)` now bootstraps the runtime table once before the catalog
+  entry is committed, so heap and index files are created eagerly instead of
+  waiting for first access
 - `create_table(...)` persists immediately for file-backed catalogs
 - if a save fails during `create_table(...)`, the in-memory append is rolled back
 
@@ -144,3 +147,4 @@ The catalog now exists as:
 - an in-memory and file-backed registry
 - a bridge into runtime table construction
 - a first catalog serializer and reopen path
+- eager physical table bootstrap during catalog table creation

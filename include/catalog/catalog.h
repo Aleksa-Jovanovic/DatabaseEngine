@@ -46,6 +46,11 @@ private:
     // Empty means this Catalog instance is purely in-memory for now.
     std::string metadata_file_name_;
 
+    std::optional<table::TableMetadata> build_table_metadata_from_definition(
+        const TableDefinition& table_definition,
+        std::size_t cache_size = 8
+    ) const;
+
 #ifndef DB_TESTING
     std::optional<table::TableMetadata> build_table_metadata(
         const std::string& table_name,

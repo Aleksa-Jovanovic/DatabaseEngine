@@ -25,6 +25,16 @@ bool Catalog::create_table(const TableDefinition& table_definition) {
         return false;
     }
 
+    // Bootstrap the physical table artifacts before making the catalog entry durable.
+    const auto table_metadata = build_table_metadata_from_definition(table_definition);
+    if (!table_metadata.has_value()) {
+        return false;
+    }
+
+    // Constructing the runtime table eagerly opens or creates the heap and
+    // index files described by the metadata.
+    table::Table bootstrap_table(table_metadata.value());
+
     metadata_.tables.push_back(table_definition);
 
     // File-backed catalogs should persist table-definition changes immediately.
@@ -56,21 +66,16 @@ std::optional<TableDefinition> Catalog::find_table_definition(const std::string&
     return std::nullopt;
 }
 
-std::optional<table::TableMetadata> Catalog::build_table_metadata(
-    const std::string& table_name,
-    std::size_t cache_size
+std::optional<table::TableMetadata> Catalog::build_table_metadata_from_definition(
+        const TableDefinition& table_definition,
+        std::size_t cache_size = 8
 ) const {
-    const auto table_definition = find_table_definition(table_name);
-    if (!table_definition.has_value()) {
-        return std::nullopt;
-    }
-
     std::string primary_index_file_name;
     std::vector<table::IndexMetadata> secondary_indexes;
 
     // Catalog keeps all indexes in one list. Runtime TableMetadata still
     // expects one explicit primary index plus a list of secondary indexes.
-    for (const IndexDefinition& index_definition : table_definition->indexes) {
+    for (const IndexDefinition& index_definition : table_definition.indexes) {
         if (index_definition.is_primary) {
             // Reject ambiguous catalog state with more than one primary index.
             if (!primary_index_file_name.empty()) {
@@ -97,12 +102,24 @@ std::optional<table::TableMetadata> Catalog::build_table_metadata(
     }
 
     return table::TableMetadata{
-        table_definition->table_name,
-        table_definition->heap_file_name,
+        table_definition.table_name,
+        table_definition.heap_file_name,
         primary_index_file_name,
         cache_size,
         std::move(secondary_indexes)
     };
+}
+
+std::optional<table::TableMetadata> Catalog::build_table_metadata(
+    const std::string& table_name,
+    std::size_t cache_size
+) const {
+    const auto table_definition = find_table_definition(table_name);
+    if (!table_definition.has_value()) {
+        return std::nullopt;
+    }
+
+    return build_table_metadata_from_definition(table_definition.value(), cache_size);
 }
 
 std::unique_ptr<table::Table> Catalog::open_table(
