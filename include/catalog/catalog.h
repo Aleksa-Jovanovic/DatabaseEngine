@@ -58,6 +58,7 @@ private:
     ) const;
 #endif
 
+    bool validate_table_definition(const TableDefinition& table_definition) const;
     bool load_from_file();
     bool save_to_file() const;
 };

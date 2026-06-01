@@ -2,6 +2,7 @@
 
 #include <fstream>
 #include <memory>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -17,7 +18,7 @@ Catalog::Catalog(const std::string& metadata_file_name)
 }
 
 bool Catalog::create_table(const TableDefinition& table_definition) {
-    if (table_definition.table_name.empty()) {
+    if (!validate_table_definition(table_definition)) {
         return false;
     }
 
@@ -68,7 +69,7 @@ std::optional<TableDefinition> Catalog::find_table_definition(const std::string&
 
 std::optional<table::TableMetadata> Catalog::build_table_metadata_from_definition(
         const TableDefinition& table_definition,
-        std::size_t cache_size = 8
+        std::size_t cache_size
 ) const {
     std::string primary_index_file_name;
     std::vector<table::IndexMetadata> secondary_indexes;
@@ -136,6 +137,101 @@ std::unique_ptr<table::Table> Catalog::open_table(
 
 const CatalogMetadata& Catalog::metadata() const {
     return metadata_;
+}
+
+bool Catalog::validate_table_definition(const TableDefinition& table_definition) const {
+    if (table_definition.table_name.empty() || table_definition.heap_file_name.empty()) {
+        return false;
+    }
+
+    const auto& columns = table_definition.schema.columns();
+    if (columns.empty()) {
+        return false;
+    }
+
+    std::unordered_set<std::string> column_names;
+    std::string primary_key_column_name;
+    ColumnType primary_key_column_type = ColumnType::Integer;
+    std::size_t primary_key_count = 0;
+
+    for (const ColumnDefinition& column : columns) {
+        if (column.name.empty()) {
+            return false;
+        }
+
+        if (!column_names.insert(column.name).second) {
+            return false;
+        }
+
+        if (column.is_primary_key) {
+            ++primary_key_count;
+
+            if (primary_key_count > 1) {
+                return false;
+            }
+
+            primary_key_column_name = column.name;
+            primary_key_column_type = column.type;
+        }
+    }
+
+    if (primary_key_count != 1) {
+        return false;
+    }
+
+    // The current table and B+ tree implementation only supports integer primary keys.
+    if (primary_key_column_type != ColumnType::Integer) {
+        return false;
+    }
+
+    if (table_definition.indexes.empty()) {
+        return false;
+    }
+
+    std::unordered_set<std::string> index_names;
+    std::size_t primary_index_count = 0;
+    std::string primary_index_column_name;
+
+    for (const IndexDefinition& index_definition : table_definition.indexes) {
+        if (index_definition.index_name.empty() ||
+            index_definition.table_name.empty() ||
+            index_definition.column_name.empty() ||
+            index_definition.file_name.empty()) {
+            return false;
+        }
+
+        if (index_definition.table_name != table_definition.table_name) {
+            return false;
+        }
+
+        if (!index_names.insert(index_definition.index_name).second) {
+            return false;
+        }
+
+        if (column_names.find(index_definition.column_name) == column_names.end()) {
+            return false;
+        }
+
+        if (index_definition.is_primary) {
+            ++primary_index_count;
+
+            if (primary_index_count > 1) {
+                return false;
+            }
+
+            primary_index_column_name = index_definition.column_name;
+        }
+    }
+
+    if (primary_index_count != 1) {
+        return false;
+    }
+
+    if (primary_index_column_name != primary_key_column_name) {
+        return false;
+    }
+
+    return true;
 }
 
 bool Catalog::load_from_file() {

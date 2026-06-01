@@ -70,6 +70,16 @@ Current public behavior:
 Current validation:
 - duplicate table names are rejected
 - empty table names are rejected
+- empty heap-file names are rejected
+- empty schemas are rejected
+- duplicate column names are rejected
+- exactly one schema primary-key column is required
+- the current primary-key column must be `Integer`
+- tables must define at least one index
+- duplicate index names are rejected
+- index definitions must reference existing schema columns
+- exactly one primary index is required
+- the primary index column must match the schema primary-key column
 
 Current persistence behavior:
 - a file-backed catalog loads its metadata blob on construction
@@ -125,18 +135,19 @@ The current catalog test verifies:
 - `open_table(...)` succeeds for known tables and fails for unknown ones
 - file-backed catalog metadata persists across reopen
 - reopened catalog can still reconstruct and open a known table
+- duplicate column-name rejection
+- duplicate index-name rejection
+- non-integer primary-key rejection
+- mismatched primary-index-column rejection
 
 ## Current limitations
 - there is no table drop or alter behavior yet
-- there is no validation yet for:
-  - duplicate index names within one table
-  - invalid schemas
-  - multiple primary-key columns
-  - multiple primary indexes
 - catalog currently bridges to the existing table runtime shape rather than to
   a fully catalog-driven runtime engine
 - persistence format versioning is still minimal and only handles one version
 - there is no explicit crash-safety or write-ahead logging for catalog writes
+- validation still returns only boolean success/failure rather than structured
+  error information
 
 ## Current phase boundary
 This is the first structural slice of Phase 7.
@@ -148,3 +159,4 @@ The catalog now exists as:
 - a bridge into runtime table construction
 - a first catalog serializer and reopen path
 - eager physical table bootstrap during catalog table creation
+- first table-definition validation rules

@@ -99,6 +99,8 @@ initial integration-test coverage.
 - table definitions
 - index definitions
 - metadata persistence
+- later improve catalog validation to return structured errors (for example
+  `CatalogValidationError`) instead of only boolean success/failure
 
 Goal:
 Track database objects and schema.
@@ -110,7 +112,8 @@ catalog-level table and index definitions, a `Catalog` registry that can
 create and look up table definitions, a serializer-backed metadata file
 format for catalog persistence, reopen support for file-backed catalogs, and
 a bridge from catalog definitions into runtime `TableMetadata` plus `Table`
-reconstruction through `open_table(...)`.
+reconstruction through `open_table(...)`, along with initial table-definition
+validation rules around primary keys, indexes, and schema consistency.
 
 ## Phase 8 - SQL layer
 - tokenizer
