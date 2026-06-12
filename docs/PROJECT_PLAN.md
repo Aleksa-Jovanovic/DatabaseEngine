@@ -124,6 +124,14 @@ validation rules around primary keys, indexes, and schema consistency.
 Goal:
 Allow simple database interaction through SQL-like syntax.
 
+Current status:
+Phase 8 is in progress.
+The project now has a first SQL tokenizer that classifies keywords,
+identifiers, type names, numeric literals, string literals, punctuation, and
+an explicit end-of-input token, along with initial tokenizer tests for basic
+`CREATE TABLE`, `INSERT`, and `SELECT` statements plus malformed string-literal
+error handling.
+
 ## Phase 9 - Execution
 - sequential scan
 - index scan

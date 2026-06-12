@@ -1,13 +1,49 @@
 #pragma once
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
-namespace db::sql {
+namespace db::sql
+{
 
-class Tokenizer {
- public:
-  std::vector<std::string> Tokenize(const std::string& sql) const;
+class SqlParseError : public std::runtime_error {
+public:
+    explicit SqlParseError(const std::string& message)
+        : std::runtime_error(message) {}
 };
 
-}  // namespace db::sql
+enum class TokenType
+{
+    Keyword,
+    Identifier,
+    TypeName,
+    Number,
+    String,
+    Comma,
+    LeftParen,
+    RightParen,
+    Semicolon,
+    Asterisk,
+    Equals,
+    EndOfInput
+};
+
+struct Token
+{
+    TokenType type;
+    std::string lexeme;
+};
+
+class Tokenizer
+{
+public:
+    std::vector<Token> tokenize(const std::string &sql) const;
+
+private:
+    static bool is_keyword(const std::string &token);
+    static bool is_type_name(const std::string &token);
+    static std::string normalize_identifier(const std::string &token);
+};
+
+} // namespace db::sql

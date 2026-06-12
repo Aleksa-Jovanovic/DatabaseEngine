@@ -19,6 +19,9 @@ add_library(db_storage
     src/table/row_serializer.cpp
     src/catalog/catalog.cpp
     src/catalog/catalog_serializer.cpp
+    src/sql/tokenizer.cpp
+    src/sql/parser.cpp
+    src/sql/ast.cpp
 )
 
 target_include_directories(db_storage
@@ -69,3 +72,4 @@ add_db_test(BPlusTreeInsertTest tests/index/bplustree_insert_test.cpp)
 add_db_test(TableTest tests/table/table_test.cpp)
 add_db_test(RowSerializerTest tests/table/row_serializer_test.cpp)
 add_db_test(CatalogTest tests/catalog/catalog_test.cpp)
+add_db_test(ParserTest tests/sql/parser_test.cpp)
