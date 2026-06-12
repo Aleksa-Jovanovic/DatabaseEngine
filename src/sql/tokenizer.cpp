@@ -3,7 +3,6 @@
 
 #include <cctype>
 #include <sstream>
-#include <stdexcept>
 #include <unordered_set>
 
 namespace db::sql
