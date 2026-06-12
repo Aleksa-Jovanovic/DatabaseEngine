@@ -5,7 +5,7 @@ Phase 8 introduces the first SQL-facing layer of the project.
 
 The immediate goal is to move from direct method calls into a pipeline where:
 - SQL text is tokenized
-- later parsed into an AST
+- parsed into an AST
 - later executed against the catalog, tables, and indexes
 
 ## Current tokenizer model
@@ -68,8 +68,39 @@ Current tokenizer errors include:
 - unterminated string literals
 - unexpected characters in SQL input
 
-Error messages now include the character position to make malformed input
-easier to debug.
+Current parser errors include:
+- unexpected token type
+- unexpected token lexeme
+- unexpected end of token stream
+- unsupported SQL statement
+- unsupported SQL type name
+
+Error messages now include character positions in the tokenizer and token
+indexes in the parser to make malformed input easier to debug.
+
+## Current AST and parser model
+The SQL layer now has a first typed AST for `CREATE TABLE`.
+
+Current AST pieces:
+- `SqlTypeName`
+  - `Integer`
+  - `String`
+  - `Boolean`
+  - `Date`
+- `ColumnDefinitionNode`
+  - column name
+  - SQL type name
+- `CreateTableStatement`
+  - table name
+  - column definitions
+- `Statement`
+  - currently a `std::variant<CreateTableStatement>`
+
+Current parser behavior:
+- tokenizes the SQL input
+- recognizes `CREATE TABLE` statements
+- parses column definitions with SQL type names
+- builds a typed `CreateTableStatement` AST node
 
 ## Current testing
 The current SQL tokenizer test verifies:
@@ -80,10 +111,17 @@ The current SQL tokenizer test verifies:
 - presence of the final `EndOfInput` token
 - throwing `SqlParseError` for an unterminated string literal
 
+The current SQL parser test verifies:
+- parsing a basic `CREATE TABLE` statement into AST form
+- parsing `BOOLEAN` and `DATE` column types into `SqlTypeName`
+- rejection of missing semicolons
+- rejection of missing type names
+- rejection of unsupported top-level statements such as `SELECT`
+
 ## Current limitations
-- parser behavior is still only a skeleton
-- AST structures are still placeholders
 - tokenizer only handles a small SQL subset
+- parser currently only handles `CREATE TABLE`
+- AST currently only models `CREATE TABLE`
 - numeric literals are currently integer-only
 - string literals do not yet support escaping
 - there is no SQL execution path yet
@@ -94,9 +132,11 @@ This is the first structural slice of Phase 8.
 The SQL layer now has:
 - a typed tokenizer
 - dedicated SQL parse errors
-- initial tests for the first supported statement forms
+- a first typed AST
+- a first parser for `CREATE TABLE`
+- separate tokenizer and parser tests
 
 The next natural steps are:
-- define AST structures
-- parse `CREATE TABLE`
-- then extend parsing to `INSERT` and `SELECT`
+- connect parsed `CREATE TABLE` statements to catalog operations
+- extend parsing to `INSERT`
+- then extend parsing to `SELECT`

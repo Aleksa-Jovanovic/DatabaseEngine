@@ -1,12 +1,35 @@
 #pragma once
 
+#include <cstddef>
 #include <string>
+#include <vector>
+
+#include "sql/ast.h"
+#include "sql/tokenizer.h"
 
 namespace db::sql {
 
 class Parser {
- public:
-  void Parse(const std::string& sql) const;
+public:
+    Statement parse(const std::string& sql) const;
+
+private:
+    static const Token& expect(
+        const std::vector<Token>& tokens,
+        std::size_t index,
+        TokenType expected_type,
+        const std::string& expected_lexeme = ""
+    );
+
+    static bool matches(
+        const std::vector<Token>& tokens,
+        std::size_t index,
+        TokenType expected_type,
+        const std::string& expected_lexeme = ""
+    );
+
+    static SqlTypeName parse_type_name(const Token& token, std::size_t token_index);
+    static CreateTableStatement parse_create_table(const std::vector<Token>& tokens);
 };
 
 }  // namespace db::sql
