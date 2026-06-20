@@ -49,6 +49,48 @@ int main() {
     }
 
     {
+        const db::sql::Statement statement =
+            parser.parse("INSERT INTO users VALUES (1, 'Alice', TRUE, DATE '2026-06-17');");
+
+        assert(std::holds_alternative<db::sql::InsertStatement>(statement));
+
+        const auto& insert =
+            std::get<db::sql::InsertStatement>(statement);
+
+        assert(insert.table_name == "users");
+        assert(insert.column_names.empty());
+        assert(insert.values.size() == 4);
+
+        assert(std::get<db::sql::IntegerLiteral>(insert.values[0]).value == 1);
+        assert(std::get<db::sql::StringLiteral>(insert.values[1]).value == "Alice");
+        assert(std::get<db::sql::BooleanLiteral>(insert.values[2]).value == true);
+        assert(std::get<db::sql::DateLiteral>(insert.values[3]).value == "2026-06-17");
+    }
+
+    {
+        const db::sql::Statement statement =
+            parser.parse("INSERT INTO users (id, name, active, created_at) VALUES (1, 'Alice', TRUE, DATE '2026-06-17');");
+
+        assert(std::holds_alternative<db::sql::InsertStatement>(statement));
+
+        const auto& insert =
+            std::get<db::sql::InsertStatement>(statement);
+
+        assert(insert.table_name == "users");
+        assert(insert.column_names.size() == 4);
+        assert(insert.column_names[0] == "id");
+        assert(insert.column_names[1] == "name");
+        assert(insert.column_names[2] == "active");
+        assert(insert.column_names[3] == "created_at");
+
+        assert(insert.values.size() == 4);
+        assert(std::get<db::sql::IntegerLiteral>(insert.values[0]).value == 1);
+        assert(std::get<db::sql::StringLiteral>(insert.values[1]).value == "Alice");
+        assert(std::get<db::sql::BooleanLiteral>(insert.values[2]).value == true);
+        assert(std::get<db::sql::DateLiteral>(insert.values[3]).value == "2026-06-17");
+    }
+
+    {
         bool threw = false;
         try {
             parser.parse("CREATE TABLE users (id INTEGER, name STRING)");
@@ -69,6 +111,30 @@ int main() {
             threw = true;
             assert(std::string(ex.what()).find("Expected SQL type name token") != std::string::npos ||
                    std::string(ex.what()).find("Unexpected token type") != std::string::npos);
+        }
+
+        assert(threw);
+    }
+
+    {
+        bool threw = false;
+        try {
+            parser.parse("INSERT INTO users () VALUES (1);");
+        } catch (const db::sql::SqlParseError& ex) {
+            threw = true;
+            assert(std::string(ex.what()).find("INSERT column list must define at least one column") != std::string::npos);
+        }
+
+        assert(threw);
+    }
+
+    {
+        bool threw = false;
+        try {
+            parser.parse("INSERT INTO users (id, name) VALUES ();");
+        } catch (const db::sql::SqlParseError& ex) {
+            threw = true;
+            assert(std::string(ex.what()).find("INSERT must define at least one value") != std::string::npos);
         }
 
         assert(threw);

@@ -128,9 +128,10 @@ Current status:
 Phase 8 is in progress.
 The project now has a first SQL tokenizer that classifies keywords,
 identifiers, type names, numeric literals, string literals, punctuation, and
-an explicit end-of-input token, along with a first typed AST and parser path
-for `CREATE TABLE`, plus separate tokenizer and parser tests for the first
-supported SQL forms and malformed-input handling.
+an explicit end-of-input token, along with typed AST and parser paths for
+`CREATE TABLE` and basic `INSERT` statements. `INSERT` parsing now supports
+both schema-order values and optional named column lists, with integer,
+string, boolean, and date literal values covered by parser tests.
 
 ## Phase 9 - Execution
 - sequential scan

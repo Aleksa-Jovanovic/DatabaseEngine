@@ -29,6 +29,11 @@ const std::unordered_set<std::string> kTypeNames = {
     "DATE"
 };
 
+const std::unordered_set<std::string> kBooleanLiterals = {
+    "TRUE",
+    "FALSE"
+};
+
 std::string make_error_with_position(const std::string& message, std::size_t position) {
     std::ostringstream out;
     out << message << " at position " << position;
@@ -152,6 +157,8 @@ std::vector<Token> Tokenizer::tokenize(const std::string &sql) const
                 tokens.push_back({TokenType::Keyword, normalized});
             } else if (is_type_name(normalized)) {
                 tokens.push_back({TokenType::TypeName, normalized});
+            } else if (is_boolean_literal(normalized)) {
+                tokens.push_back({TokenType::Boolean, normalized});
             } else {
                 tokens.push_back({TokenType::Identifier, raw});
             }
@@ -177,6 +184,11 @@ bool Tokenizer::is_keyword(const std::string &token)
 
 bool Tokenizer::is_type_name(const std::string& token) {
     return kTypeNames.find(token) != kTypeNames.end();
+}
+
+bool Tokenizer::is_boolean_literal(const std::string& token)
+{
+    return kBooleanLiterals.find(token) != kBooleanLiterals.end();
 }
 
 std::string Tokenizer::normalize_identifier(const std::string &token)

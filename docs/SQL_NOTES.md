@@ -20,6 +20,7 @@ Current token model:
   - `TypeName`
   - `Number`
   - `String`
+  - `Boolean`
   - `Comma`
   - `LeftParen`
   - `RightParen`
@@ -74,12 +75,14 @@ Current parser errors include:
 - unexpected end of token stream
 - unsupported SQL statement
 - unsupported SQL type name
+- invalid empty `INSERT` column lists
+- invalid empty `INSERT` value lists
 
 Error messages now include character positions in the tokenizer and token
 indexes in the parser to make malformed input easier to debug.
 
 ## Current AST and parser model
-The SQL layer now has a first typed AST for `CREATE TABLE`.
+The SQL layer now has a first typed AST for `CREATE TABLE` and `INSERT`.
 
 Current AST pieces:
 - `SqlTypeName`
@@ -93,14 +96,28 @@ Current AST pieces:
 - `CreateTableStatement`
   - table name
   - column definitions
+- literal value nodes
+  - integer literals
+  - string literals
+  - boolean literals
+  - date literals
+- `InsertStatement`
+  - table name
+  - optional column-name list
+  - value list
 - `Statement`
-  - currently a `std::variant<CreateTableStatement>`
+  - currently a `std::variant<CreateTableStatement, InsertStatement>`
 
 Current parser behavior:
 - tokenizes the SQL input
 - recognizes `CREATE TABLE` statements
 - parses column definitions with SQL type names
 - builds a typed `CreateTableStatement` AST node
+- recognizes `INSERT INTO ... VALUES (...)` statements
+- recognizes `INSERT INTO ... (column, column) VALUES (...)` statements
+- parses integer, string, boolean, and date literal values
+- leaves semantic checks, such as column/value count matching, to the later
+  execution layer where table schema metadata is available
 
 ## Current testing
 The current SQL tokenizer test verifies:
@@ -114,16 +131,23 @@ The current SQL tokenizer test verifies:
 The current SQL parser test verifies:
 - parsing a basic `CREATE TABLE` statement into AST form
 - parsing `BOOLEAN` and `DATE` column types into `SqlTypeName`
+- parsing positional `INSERT` values into AST form
+- parsing named-column `INSERT` values into AST form
+- parsing integer, string, boolean, and date literal values
 - rejection of missing semicolons
 - rejection of missing type names
+- rejection of empty `INSERT` column lists
+- rejection of empty `INSERT` value lists
 - rejection of unsupported top-level statements such as `SELECT`
 
 ## Current limitations
 - tokenizer only handles a small SQL subset
-- parser currently only handles `CREATE TABLE`
-- AST currently only models `CREATE TABLE`
+- parser currently handles `CREATE TABLE` and basic `INSERT`
+- AST currently models `CREATE TABLE` and basic `INSERT`
 - numeric literals are currently integer-only
 - string literals do not yet support escaping
+- date literals are currently represented as strings after `DATE '...'`
+- parser does not yet validate inserted values against table schemas
 - there is no SQL execution path yet
 
 ## Current phase boundary
@@ -134,9 +158,10 @@ The SQL layer now has:
 - dedicated SQL parse errors
 - a first typed AST
 - a first parser for `CREATE TABLE`
+- parser support for basic `INSERT`
 - separate tokenizer and parser tests
 
 The next natural steps are:
 - connect parsed `CREATE TABLE` statements to catalog operations
-- extend parsing to `INSERT`
+- connect parsed `INSERT` statements to table insert operations
 - then extend parsing to `SELECT`

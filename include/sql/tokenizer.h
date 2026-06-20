@@ -21,6 +21,7 @@ enum class TokenType
     TypeName,
     Number,
     String,
+    Boolean,
     Comma,
     LeftParen,
     RightParen,
@@ -44,6 +45,7 @@ public:
 private:
     static bool is_keyword(const std::string &token);
     static bool is_type_name(const std::string &token);
+    static bool is_boolean_literal(const std::string& token);
     static std::string normalize_identifier(const std::string &token);
 };
 
