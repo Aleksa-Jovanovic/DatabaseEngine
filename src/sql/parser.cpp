@@ -30,6 +30,10 @@ Statement Parser::parse(const std::string& sql) const {
         return parse_insert(tokens);
     }
 
+    if (matches(tokens, 0, TokenType::Keyword, "SELECT")) {
+        return parse_select(tokens);
+    }
+
     throw SqlParseError("Unsupported SQL statement");
 }
 
@@ -132,6 +136,37 @@ ValueNode Parser::parse_value(const std::vector<Token>& tokens, std::size_t& ind
     throw SqlParseError(make_parser_error("Expected SQL literal value", index));
 }
 
+ComparisonOperator Parser::parse_comparison_operator(
+    const std::vector<Token>& tokens,
+    std::size_t& index
+) {
+    if (matches(tokens, index, TokenType::Equals)) {
+        ++index;
+        return ComparisonOperator::Equal;
+    }
+
+    if (matches(tokens, index, TokenType::LessThan)) {
+        ++index;
+        return ComparisonOperator::LessThan;
+    }
+
+    if (matches(tokens, index, TokenType::LessThanOrEqual)) {
+        ++index;
+        return ComparisonOperator::LessThanOrEqual;
+    }
+
+    if (matches(tokens, index, TokenType::GreaterThan)) {
+        ++index;
+        return ComparisonOperator::GreaterThan;
+    }
+
+    if (matches(tokens, index, TokenType::GreaterThanOrEqual)) {
+        ++index;
+        return ComparisonOperator::GreaterThanOrEqual;
+    }
+
+    throw SqlParseError(make_parser_error("Expected comparison operator", index));
+}
 
 CreateTableStatement Parser::parse_create_table(const std::vector<Token>& tokens) {
     std::size_t index = 0;
@@ -236,6 +271,67 @@ InsertStatement Parser::parse_insert(const std::vector<Token>& tokens) {
         table_name.lexeme,
         std::move(column_names),
         std::move(values)
+    };
+}
+
+SelectStatement Parser::parse_select(const std::vector<Token>& tokens) {
+    std::size_t index = 0;
+
+    expect(tokens, index++, TokenType::Keyword, "SELECT");
+
+    bool select_all = false;
+    std::vector<std::string> column_names;
+
+    if (matches(tokens, index, TokenType::Asterisk)) {
+        select_all = true;
+        ++index;
+    } else {
+        while (true) {
+            const Token& column_name = expect(tokens, index++, TokenType::Identifier);
+            column_names.push_back(column_name.lexeme);
+
+            if (matches(tokens, index, TokenType::Comma)) {
+                ++index;
+                continue;
+            }
+
+            break;
+        }
+    }
+
+    if (!select_all && column_names.empty()) {
+        throw SqlParseError(make_parser_error("SELECT must define at least one column", index));
+    }
+
+    expect(tokens, index++, TokenType::Keyword, "FROM");
+
+    const Token& table_name = expect(tokens, index++, TokenType::Identifier);
+
+    std::optional<WhereClause> where_clause;
+
+    if (matches(tokens, index, TokenType::Keyword, "WHERE")) {
+        ++index;
+
+        const Token& column_name = expect(tokens, index++, TokenType::Identifier);
+        const ComparisonOperator comparison_operator = parse_comparison_operator(tokens, index);
+
+        ValueNode value = parse_value(tokens, index);
+
+        where_clause = WhereClause{
+            column_name.lexeme,
+            comparison_operator,
+            std::move(value)
+        };
+    }
+
+    expect(tokens, index++, TokenType::Semicolon);
+    expect(tokens, index++, TokenType::EndOfInput);
+
+    return SelectStatement{
+        table_name.lexeme,
+        select_all,
+        std::move(column_names),
+        std::move(where_clause)
     };
 }
 

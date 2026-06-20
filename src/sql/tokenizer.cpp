@@ -103,6 +103,14 @@ std::vector<Token> Tokenizer::tokenize(const std::string &sql) const
             tokens.push_back({TokenType::Equals, "="});
             ++i;
             continue;
+        case '<':
+            tokens.push_back({TokenType::LessThan, "<"});
+            ++i;
+            continue;
+        case '>':
+            tokens.push_back({TokenType::GreaterThan, ">"});
+            ++i;
+            continue;
         case '\'':
         {
             ++i;

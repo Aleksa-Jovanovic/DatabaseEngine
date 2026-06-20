@@ -28,6 +28,10 @@ enum class TokenType
     Semicolon,
     Asterisk,
     Equals,
+    LessThan,
+    LessThanOrEqual,
+    GreaterThan,
+    GreaterThanOrEqual,
     EndOfInput
 };
 

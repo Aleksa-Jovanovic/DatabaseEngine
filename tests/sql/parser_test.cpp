@@ -141,12 +141,129 @@ int main() {
     }
 
     {
+        const db::sql::Statement statement =
+            parser.parse("SELECT * FROM users;");
+
+        assert(std::holds_alternative<db::sql::SelectStatement>(statement));
+
+        const auto& select =
+            std::get<db::sql::SelectStatement>(statement);
+
+        assert(select.table_name == "users");
+        assert(select.select_all == true);
+        assert(select.column_names.empty());
+    }
+
+    {
+        const db::sql::Statement statement =
+            parser.parse("SELECT id, name FROM users;");
+
+        assert(std::holds_alternative<db::sql::SelectStatement>(statement));
+
+        const auto& select =
+            std::get<db::sql::SelectStatement>(statement);
+
+        assert(select.table_name == "users");
+        assert(select.select_all == false);
+        assert(select.column_names.size() == 2);
+        assert(select.column_names[0] == "id");
+        assert(select.column_names[1] == "name");
+    }
+
+    {
         bool threw = false;
         try {
-            parser.parse("SELECT * FROM users;");
+            parser.parse("SELECT FROM users;");
         } catch (const db::sql::SqlParseError& ex) {
             threw = true;
-            assert(std::string(ex.what()).find("Unsupported SQL statement") != std::string::npos);
+            assert(std::string(ex.what()).find("Unexpected token type") != std::string::npos);
+        }
+
+        assert(threw);
+    }
+
+    {
+        const db::sql::Statement statement =
+            parser.parse("SELECT * FROM users WHERE id = 1;");
+
+        assert(std::holds_alternative<db::sql::SelectStatement>(statement));
+
+        const auto& select =
+            std::get<db::sql::SelectStatement>(statement);
+
+        assert(select.table_name == "users");
+        assert(select.select_all == true);
+        assert(select.column_names.empty());
+        assert(select.where_clause.has_value());
+
+        assert(select.where_clause->column_name == "id");
+        assert(select.where_clause->comparison_operator == db::sql::ComparisonOperator::Equal);
+        assert(std::get<db::sql::IntegerLiteral>(select.where_clause->value).value == 1);
+    }
+
+    {
+        const db::sql::Statement statement =
+            parser.parse("SELECT id, name FROM users WHERE name = 'Alice';");
+
+        assert(std::holds_alternative<db::sql::SelectStatement>(statement));
+
+        const auto& select =
+            std::get<db::sql::SelectStatement>(statement);
+
+        assert(select.table_name == "users");
+        assert(select.select_all == false);
+        assert(select.column_names.size() == 2);
+        assert(select.where_clause.has_value());
+
+        assert(select.where_clause->column_name == "name");
+        assert(select.where_clause->comparison_operator == db::sql::ComparisonOperator::Equal);
+        assert(std::get<db::sql::StringLiteral>(select.where_clause->value).value == "Alice");
+    }
+
+    {
+        const db::sql::Statement statement =
+            parser.parse("SELECT * FROM users WHERE id < 10;");
+
+        assert(std::holds_alternative<db::sql::SelectStatement>(statement));
+
+        const auto& select =
+            std::get<db::sql::SelectStatement>(statement);
+
+        assert(select.table_name == "users");
+        assert(select.select_all == true);
+        assert(select.where_clause.has_value());
+
+        assert(select.where_clause->column_name == "id");
+        assert(select.where_clause->comparison_operator == db::sql::ComparisonOperator::LessThan);
+        assert(std::get<db::sql::IntegerLiteral>(select.where_clause->value).value == 10);
+    }
+
+    {
+        const db::sql::Statement statement =
+            parser.parse("SELECT id, name FROM users WHERE id > 10;");
+
+        assert(std::holds_alternative<db::sql::SelectStatement>(statement));
+
+        const auto& select =
+            std::get<db::sql::SelectStatement>(statement);
+
+        assert(select.table_name == "users");
+        assert(select.select_all == false);
+        assert(select.column_names.size() == 2);
+        assert(select.where_clause.has_value());
+
+        assert(select.where_clause->column_name == "id");
+        assert(select.where_clause->comparison_operator == db::sql::ComparisonOperator::GreaterThan);
+        assert(std::get<db::sql::IntegerLiteral>(select.where_clause->value).value == 10);
+    }
+
+    {
+        bool threw = false;
+        try {
+            parser.parse("SELECT * FROM users WHERE id;");
+        } catch (const db::sql::SqlParseError& ex) {
+            threw = true;
+            assert(std::string(ex.what()).find("Expected comparison operator") != std::string::npos);
         }
 
         assert(threw);

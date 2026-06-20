@@ -27,6 +27,10 @@ Current token model:
   - `Semicolon`
   - `Asterisk`
   - `Equals`
+  - `LessThan`
+  - `LessThanOrEqual`
+  - `GreaterThan`
+  - `GreaterThanOrEqual`
   - `EndOfInput`
 - `Token`
   - token type
@@ -77,12 +81,14 @@ Current parser errors include:
 - unsupported SQL type name
 - invalid empty `INSERT` column lists
 - invalid empty `INSERT` value lists
+- invalid or missing `WHERE` comparison operators
 
 Error messages now include character positions in the tokenizer and token
 indexes in the parser to make malformed input easier to debug.
 
 ## Current AST and parser model
-The SQL layer now has a first typed AST for `CREATE TABLE` and `INSERT`.
+The SQL layer now has a first typed AST for `CREATE TABLE`, `INSERT`, and
+`SELECT`.
 
 Current AST pieces:
 - `SqlTypeName`
@@ -105,8 +111,22 @@ Current AST pieces:
   - table name
   - optional column-name list
   - value list
+- `ComparisonOperator`
+  - `Equal`
+  - `LessThan`
+  - `LessThanOrEqual`
+  - `GreaterThan`
+  - `GreaterThanOrEqual`
+- `WhereClause`
+  - column name
+  - comparison operator
+  - literal value
+- `SelectStatement`
+  - table name
+  - either `*` or explicit projected columns
+  - optional `WHERE` clause
 - `Statement`
-  - currently a `std::variant<CreateTableStatement, InsertStatement>`
+  - currently a `std::variant<CreateTableStatement, InsertStatement, SelectStatement>`
 
 Current parser behavior:
 - tokenizes the SQL input
@@ -116,6 +136,10 @@ Current parser behavior:
 - recognizes `INSERT INTO ... VALUES (...)` statements
 - recognizes `INSERT INTO ... (column, column) VALUES (...)` statements
 - parses integer, string, boolean, and date literal values
+- recognizes `SELECT * FROM ...` statements
+- recognizes `SELECT column, column FROM ...` statements
+- parses optional equality/range `WHERE` filters
+- supports `=`, `<`, `<=`, `>`, and `>=` comparison operators
 - leaves semantic checks, such as column/value count matching, to the later
   execution layer where table schema metadata is available
 
@@ -125,6 +149,7 @@ The current SQL tokenizer test verifies:
 - tokenization of a basic `INSERT` statement
 - tokenization of a basic `SELECT` statement
 - recognition of `BOOLEAN` and `DATE` as `TypeName`
+- recognition of comparison operators used by `WHERE`
 - presence of the final `EndOfInput` token
 - throwing `SqlParseError` for an unterminated string literal
 
@@ -134,20 +159,27 @@ The current SQL parser test verifies:
 - parsing positional `INSERT` values into AST form
 - parsing named-column `INSERT` values into AST form
 - parsing integer, string, boolean, and date literal values
+- parsing `SELECT * FROM ...` into AST form
+- parsing projected-column `SELECT` statements into AST form
+- parsing optional `WHERE` filters into AST form
+- parsing `=`, `<`, `<=`, `>`, and `>=` comparison operators
 - rejection of missing semicolons
 - rejection of missing type names
 - rejection of empty `INSERT` column lists
 - rejection of empty `INSERT` value lists
-- rejection of unsupported top-level statements such as `SELECT`
+- rejection of malformed `SELECT` and `WHERE` statements
 
 ## Current limitations
 - tokenizer only handles a small SQL subset
-- parser currently handles `CREATE TABLE` and basic `INSERT`
-- AST currently models `CREATE TABLE` and basic `INSERT`
+- parser currently handles `CREATE TABLE`, basic `INSERT`, and basic `SELECT`
+- AST currently models `CREATE TABLE`, basic `INSERT`, and basic `SELECT`
 - numeric literals are currently integer-only
 - string literals do not yet support escaping
 - date literals are currently represented as strings after `DATE '...'`
 - parser does not yet validate inserted values against table schemas
+- parser does not yet validate selected columns against table schemas
+- `WHERE` currently supports only a single comparison expression
+- `AND`, `OR`, and parenthesized boolean expressions are not supported yet
 - there is no SQL execution path yet
 
 ## Current phase boundary
@@ -159,9 +191,12 @@ The SQL layer now has:
 - a first typed AST
 - a first parser for `CREATE TABLE`
 - parser support for basic `INSERT`
+- parser support for basic `SELECT`
+- parser support for single-comparison `WHERE` filters
 - separate tokenizer and parser tests
 
 The next natural steps are:
 - connect parsed `CREATE TABLE` statements to catalog operations
 - connect parsed `INSERT` statements to table insert operations
-- then extend parsing to `SELECT`
+- connect parsed `SELECT` statements to table scans and filtering
+- later extend `WHERE` to support `AND`, `OR`, and parentheses

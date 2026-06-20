@@ -30,8 +30,14 @@ private:
 
     static SqlTypeName parse_type_name(const Token& token, std::size_t token_index);
     static ValueNode parse_value(const std::vector<Token>& tokens, std::size_t& index);
+    static ComparisonOperator parse_comparison_operator(
+        const std::vector<Token>& tokens,
+        std::size_t& index
+    );
+
     static CreateTableStatement parse_create_table(const std::vector<Token>& tokens);
     static InsertStatement parse_insert(const std::vector<Token>& tokens);
+    static SelectStatement parse_select(const std::vector<Token>& tokens);
 };
 
 }  // namespace db::sql

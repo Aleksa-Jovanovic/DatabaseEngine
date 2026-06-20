@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -28,11 +29,11 @@ struct CreateTableStatement {
 
 // InsertStatement - BEGIN
 struct IntegerLiteral {
-  std::int64_t value;
+    std::int64_t value;
 };
 
 struct StringLiteral {
-  std::string value;
+    std::string value;
 };
 
 struct BooleanLiteral {
@@ -57,6 +58,33 @@ struct InsertStatement {
 };
 // InsertStatement - END
 
-using Statement = std::variant<CreateTableStatement, InsertStatement>;
+// SelectStatement - BEGIN
+enum class ComparisonOperator {
+    Equal,
+    LessThan,
+    LessThanOrEqual,
+    GreaterThan,
+    GreaterThanOrEqual
+};
+
+struct WhereClause {
+    std::string column_name;
+    ComparisonOperator comparison_operator;
+    ValueNode value;
+};
+
+struct SelectStatement {
+    std::string table_name;
+    bool select_all;
+    std::vector<std::string> column_names;
+    std::optional<WhereClause> where_clause;
+};
+// SelectStatement - END
+
+using Statement = std::variant<
+    CreateTableStatement,
+    InsertStatement,
+    SelectStatement
+>;
 
 }  // namespace db::sql
