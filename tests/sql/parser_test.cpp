@@ -7,6 +7,51 @@
 #include "sql/parser.h"
 #include "sql/tokenizer.h"
 
+namespace {
+
+const db::sql::WhereExpression& require_where_expression(
+    const db::sql::SelectStatement& select
+) {
+    assert(select.where_expression.has_value());
+    return select.where_expression.value();
+}
+
+const db::sql::ComparisonExpression& require_comparison(
+    const db::sql::WhereExpression& expression
+) {
+    assert(expression.kind == db::sql::WhereExpressionKind::Comparison);
+    assert(expression.comparison.has_value());
+    return expression.comparison.value();
+}
+
+const db::sql::BetweenExpression& require_between(
+    const db::sql::WhereExpression& expression
+) {
+    assert(expression.kind == db::sql::WhereExpressionKind::Between);
+    assert(expression.between.has_value());
+    return expression.between.value();
+}
+
+const db::sql::WhereExpression& require_logical_child(
+    const db::sql::WhereExpression& expression,
+    db::sql::LogicalOperator expected_operator,
+    bool left_child
+) {
+    assert(expression.kind == db::sql::WhereExpressionKind::Logical);
+    assert(expression.logical_operator.has_value());
+    assert(expression.logical_operator.value() == expected_operator);
+
+    if (left_child) {
+        assert(expression.left != nullptr);
+        return *expression.left;
+    }
+
+    assert(expression.right != nullptr);
+    return *expression.right;
+}
+
+}  // namespace
+
 int main() {
     db::sql::Parser parser;
 
@@ -194,11 +239,11 @@ int main() {
         assert(select.table_name == "users");
         assert(select.select_all == true);
         assert(select.column_names.empty());
-        assert(select.where_clause.has_value());
 
-        assert(select.where_clause->column_name == "id");
-        assert(select.where_clause->comparison_operator == db::sql::ComparisonOperator::Equal);
-        assert(std::get<db::sql::IntegerLiteral>(select.where_clause->value).value == 1);
+        const auto& comparison = require_comparison(require_where_expression(select));
+        assert(comparison.column_name == "id");
+        assert(comparison.comparison_operator == db::sql::ComparisonOperator::Equal);
+        assert(std::get<db::sql::IntegerLiteral>(comparison.value).value == 1);
     }
 
     {
@@ -213,11 +258,11 @@ int main() {
         assert(select.table_name == "users");
         assert(select.select_all == false);
         assert(select.column_names.size() == 2);
-        assert(select.where_clause.has_value());
 
-        assert(select.where_clause->column_name == "name");
-        assert(select.where_clause->comparison_operator == db::sql::ComparisonOperator::Equal);
-        assert(std::get<db::sql::StringLiteral>(select.where_clause->value).value == "Alice");
+        const auto& comparison = require_comparison(require_where_expression(select));
+        assert(comparison.column_name == "name");
+        assert(comparison.comparison_operator == db::sql::ComparisonOperator::Equal);
+        assert(std::get<db::sql::StringLiteral>(comparison.value).value == "Alice");
     }
 
     {
@@ -231,11 +276,28 @@ int main() {
 
         assert(select.table_name == "users");
         assert(select.select_all == true);
-        assert(select.where_clause.has_value());
 
-        assert(select.where_clause->column_name == "id");
-        assert(select.where_clause->comparison_operator == db::sql::ComparisonOperator::LessThan);
-        assert(std::get<db::sql::IntegerLiteral>(select.where_clause->value).value == 10);
+        const auto& comparison = require_comparison(require_where_expression(select));
+        assert(comparison.column_name == "id");
+        assert(comparison.comparison_operator == db::sql::ComparisonOperator::LessThan);
+        assert(std::get<db::sql::IntegerLiteral>(comparison.value).value == 10);
+    }
+
+    {
+        const db::sql::Statement statement =
+            parser.parse("SELECT * FROM users WHERE id <= 10;");
+
+        assert(std::holds_alternative<db::sql::SelectStatement>(statement));
+
+        const auto& select =
+            std::get<db::sql::SelectStatement>(statement);
+
+        assert(select.table_name == "users");
+
+        const auto& comparison = require_comparison(require_where_expression(select));
+        assert(comparison.column_name == "id");
+        assert(comparison.comparison_operator == db::sql::ComparisonOperator::LessThanOrEqual);
+        assert(std::get<db::sql::IntegerLiteral>(comparison.value).value == 10);
     }
 
     {
@@ -250,11 +312,115 @@ int main() {
         assert(select.table_name == "users");
         assert(select.select_all == false);
         assert(select.column_names.size() == 2);
-        assert(select.where_clause.has_value());
 
-        assert(select.where_clause->column_name == "id");
-        assert(select.where_clause->comparison_operator == db::sql::ComparisonOperator::GreaterThan);
-        assert(std::get<db::sql::IntegerLiteral>(select.where_clause->value).value == 10);
+        const auto& comparison = require_comparison(require_where_expression(select));
+        assert(comparison.column_name == "id");
+        assert(comparison.comparison_operator == db::sql::ComparisonOperator::GreaterThan);
+        assert(std::get<db::sql::IntegerLiteral>(comparison.value).value == 10);
+    }
+
+    {
+        const db::sql::Statement statement =
+            parser.parse("SELECT * FROM users WHERE id >= 10;");
+
+        assert(std::holds_alternative<db::sql::SelectStatement>(statement));
+
+        const auto& select =
+            std::get<db::sql::SelectStatement>(statement);
+
+        assert(select.table_name == "users");
+
+        const auto& comparison = require_comparison(require_where_expression(select));
+        assert(comparison.column_name == "id");
+        assert(comparison.comparison_operator == db::sql::ComparisonOperator::GreaterThanOrEqual);
+        assert(std::get<db::sql::IntegerLiteral>(comparison.value).value == 10);
+    }
+
+    {
+        const db::sql::Statement statement =
+            parser.parse("SELECT * FROM users WHERE id = 1 AND active = TRUE;");
+
+        assert(std::holds_alternative<db::sql::SelectStatement>(statement));
+
+        const auto& select =
+            std::get<db::sql::SelectStatement>(statement);
+
+        const auto& where = require_where_expression(select);
+        const auto& left = require_logical_child(where, db::sql::LogicalOperator::And, true);
+        const auto& right = require_logical_child(where, db::sql::LogicalOperator::And, false);
+
+        const auto& left_comparison = require_comparison(left);
+        assert(left_comparison.column_name == "id");
+        assert(left_comparison.comparison_operator == db::sql::ComparisonOperator::Equal);
+        assert(std::get<db::sql::IntegerLiteral>(left_comparison.value).value == 1);
+
+        const auto& right_comparison = require_comparison(right);
+        assert(right_comparison.column_name == "active");
+        assert(right_comparison.comparison_operator == db::sql::ComparisonOperator::Equal);
+        assert(std::get<db::sql::BooleanLiteral>(right_comparison.value).value == true);
+    }
+
+    {
+        const db::sql::Statement statement =
+            parser.parse("SELECT * FROM users WHERE name = 'Alice' OR name = 'Bob';");
+
+        assert(std::holds_alternative<db::sql::SelectStatement>(statement));
+
+        const auto& select =
+            std::get<db::sql::SelectStatement>(statement);
+
+        const auto& where = require_where_expression(select);
+        const auto& left = require_logical_child(where, db::sql::LogicalOperator::Or, true);
+        const auto& right = require_logical_child(where, db::sql::LogicalOperator::Or, false);
+
+        const auto& left_comparison = require_comparison(left);
+        assert(left_comparison.column_name == "name");
+        assert(std::get<db::sql::StringLiteral>(left_comparison.value).value == "Alice");
+
+        const auto& right_comparison = require_comparison(right);
+        assert(right_comparison.column_name == "name");
+        assert(std::get<db::sql::StringLiteral>(right_comparison.value).value == "Bob");
+    }
+
+    {
+        const db::sql::Statement statement =
+            parser.parse("SELECT * FROM users WHERE id = 1 OR active = TRUE AND name = 'Alice';");
+
+        assert(std::holds_alternative<db::sql::SelectStatement>(statement));
+
+        const auto& select =
+            std::get<db::sql::SelectStatement>(statement);
+
+        const auto& where = require_where_expression(select);
+        const auto& left = require_logical_child(where, db::sql::LogicalOperator::Or, true);
+        const auto& right = require_logical_child(where, db::sql::LogicalOperator::Or, false);
+
+        const auto& left_comparison = require_comparison(left);
+        assert(left_comparison.column_name == "id");
+
+        const auto& and_left = require_logical_child(right, db::sql::LogicalOperator::And, true);
+        const auto& and_right = require_logical_child(right, db::sql::LogicalOperator::And, false);
+
+        const auto& active_comparison = require_comparison(and_left);
+        assert(active_comparison.column_name == "active");
+
+        const auto& name_comparison = require_comparison(and_right);
+        assert(name_comparison.column_name == "name");
+    }
+
+    {
+        const db::sql::Statement statement =
+            parser.parse("SELECT * FROM users WHERE id BETWEEN 10 AND 20;");
+
+        assert(std::holds_alternative<db::sql::SelectStatement>(statement));
+
+        const auto& select =
+            std::get<db::sql::SelectStatement>(statement);
+
+        const auto& between = require_between(require_where_expression(select));
+        assert(between.column_name == "id");
+        assert(std::get<db::sql::IntegerLiteral>(between.lower_bound).value == 10);
+        assert(std::get<db::sql::IntegerLiteral>(between.upper_bound).value == 20);
     }
 
     {

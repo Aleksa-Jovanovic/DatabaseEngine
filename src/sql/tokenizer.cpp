@@ -19,7 +19,10 @@ const std::unordered_set<std::string> kKeywords = {
     "VALUES",
     "SELECT",
     "FROM",
-    "WHERE"
+    "WHERE",
+    "AND",
+    "OR",
+    "BETWEEN"
 };
 
 const std::unordered_set<std::string> kTypeNames = {
@@ -104,12 +107,23 @@ std::vector<Token> Tokenizer::tokenize(const std::string &sql) const
             ++i;
             continue;
         case '<':
-            tokens.push_back({TokenType::LessThan, "<"});
-            ++i;
+            if (i + 1 < sql.size() && sql[i + 1] == '=') {
+                tokens.push_back({TokenType::LessThanOrEqual, "<="});
+                i += 2;
+            } else {
+                tokens.push_back({TokenType::LessThan, "<"});
+                ++i;
+            }
             continue;
+
         case '>':
-            tokens.push_back({TokenType::GreaterThan, ">"});
-            ++i;
+            if (i + 1 < sql.size() && sql[i + 1] == '=') {
+                tokens.push_back({TokenType::GreaterThanOrEqual, ">="});
+                i += 2;
+            } else {
+                tokens.push_back({TokenType::GreaterThan, ">"});
+                ++i;
+            }
             continue;
         case '\'':
         {

@@ -1,7 +1,9 @@
 #include "sql/parser.h"
 
+#include <memory>
 #include <sstream>
 #include <string>
+#include <utility>
 
 namespace db::sql {
 namespace {
@@ -10,6 +12,51 @@ std::string make_parser_error(const std::string& message, std::size_t token_inde
     std::ostringstream out;
     out << message << " at token index " << token_index;
     return out.str();
+}
+
+WhereExpression make_comparison_expression(
+    std::string column_name,
+    ComparisonOperator comparison_operator,
+    ValueNode value
+) {
+    WhereExpression expression;
+    expression.kind = WhereExpressionKind::Comparison;
+    expression.comparison = ComparisonExpression{
+        std::move(column_name),
+        comparison_operator,
+        std::move(value)
+    };
+
+    return expression;
+}
+
+WhereExpression make_between_expression(
+    std::string column_name,
+    ValueNode lower_bound,
+    ValueNode upper_bound
+) {
+    WhereExpression expression;
+    expression.kind = WhereExpressionKind::Between;
+    expression.between = BetweenExpression{
+        std::move(column_name),
+        std::move(lower_bound),
+        std::move(upper_bound)
+    };
+    return expression;
+}
+
+WhereExpression make_logical_expression(
+    LogicalOperator logical_operator,
+    WhereExpression left,
+    WhereExpression right
+) {
+    WhereExpression expression;
+    expression.kind = WhereExpressionKind::Logical;
+    expression.logical_operator = logical_operator;
+    // Logical nodes own their children so WHERE can represent nested trees.
+    expression.left = std::make_unique<WhereExpression>(std::move(left));
+    expression.right = std::make_unique<WhereExpression>(std::move(right));
+    return expression;
 }
 
 }  // namespace
@@ -134,6 +181,94 @@ ValueNode Parser::parse_value(const std::vector<Token>& tokens, std::size_t& ind
     }
 
     throw SqlParseError(make_parser_error("Expected SQL literal value", index));
+}
+
+WhereExpression Parser::parse_where_expression(
+    const std::vector<Token>& tokens,
+    std::size_t& index
+) {
+    // Start at the lowest-precedence operator so AND groups tighter than OR.
+    return parse_or_expression(tokens, index);
+}
+
+WhereExpression Parser::parse_or_expression(
+    const std::vector<Token>& tokens,
+    std::size_t& index
+) {
+    WhereExpression left = parse_and_expression(tokens, index);
+
+    // OR binds looser than AND, so each side is parsed as a full AND expression.
+    while (matches(tokens, index, TokenType::Keyword, "OR")) {
+        ++index;
+
+        WhereExpression right = parse_and_expression(tokens, index);
+
+        left = make_logical_expression(
+            LogicalOperator::Or,
+            std::move(left),
+            std::move(right)
+        );
+    }
+
+    return left;
+}
+
+WhereExpression Parser::parse_and_expression(
+    const std::vector<Token>& tokens,
+    std::size_t& index
+) {
+    WhereExpression left = parse_predicate_expression(tokens, index);
+
+    // AND combines predicate leaves before parse_or_expression sees any OR.
+    while (matches(tokens, index, TokenType::Keyword, "AND")) {
+        ++index;
+
+        WhereExpression right = parse_predicate_expression(tokens, index);
+
+        left = make_logical_expression(
+            LogicalOperator::And,
+            std::move(left),
+            std::move(right)
+        );
+    }
+
+    return left;
+}
+
+WhereExpression Parser::parse_predicate_expression(
+    const std::vector<Token>& tokens,
+    std::size_t& index
+) {
+    const Token& column_name = expect(tokens, index++, TokenType::Identifier);
+
+    // BETWEEN consumes its own AND, so it must be recognized before the
+    // general logical-AND parser gets a chance to treat it as a tree join.
+    if (matches(tokens, index, TokenType::Keyword, "BETWEEN")) {
+        ++index;
+
+        ValueNode lower_bound = parse_value(tokens, index);
+
+        expect(tokens, index++, TokenType::Keyword, "AND");
+
+        ValueNode upper_bound = parse_value(tokens, index);
+
+        return make_between_expression(
+            column_name.lexeme,
+            std::move(lower_bound),
+            std::move(upper_bound)
+        );
+    }
+
+    const ComparisonOperator comparison_operator =
+        parse_comparison_operator(tokens, index);
+
+    ValueNode value = parse_value(tokens, index);
+
+    return make_comparison_expression(
+        column_name.lexeme,
+        comparison_operator,
+        std::move(value)
+    );
 }
 
 ComparisonOperator Parser::parse_comparison_operator(
@@ -307,21 +442,11 @@ SelectStatement Parser::parse_select(const std::vector<Token>& tokens) {
 
     const Token& table_name = expect(tokens, index++, TokenType::Identifier);
 
-    std::optional<WhereClause> where_clause;
+    std::optional<WhereExpression> where_expression;
 
     if (matches(tokens, index, TokenType::Keyword, "WHERE")) {
         ++index;
-
-        const Token& column_name = expect(tokens, index++, TokenType::Identifier);
-        const ComparisonOperator comparison_operator = parse_comparison_operator(tokens, index);
-
-        ValueNode value = parse_value(tokens, index);
-
-        where_clause = WhereClause{
-            column_name.lexeme,
-            comparison_operator,
-            std::move(value)
-        };
+        where_expression = parse_where_expression(tokens, index);
     }
 
     expect(tokens, index++, TokenType::Semicolon);
@@ -331,7 +456,7 @@ SelectStatement Parser::parse_select(const std::vector<Token>& tokens) {
         table_name.lexeme,
         select_all,
         std::move(column_names),
-        std::move(where_clause)
+        std::move(where_expression)
     };
 }
 

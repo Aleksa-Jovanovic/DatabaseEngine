@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <variant>
@@ -67,17 +68,43 @@ enum class ComparisonOperator {
     GreaterThanOrEqual
 };
 
-struct WhereClause {
+enum class LogicalOperator {
+    And,
+    Or
+};
+
+enum class WhereExpressionKind {
+    Comparison,
+    Between,
+    Logical
+};
+
+struct ComparisonExpression {
     std::string column_name;
     ComparisonOperator comparison_operator;
     ValueNode value;
+};
+
+struct BetweenExpression {
+    std::string column_name;
+    ValueNode lower_bound;
+    ValueNode upper_bound;
+};
+
+struct WhereExpression {
+    WhereExpressionKind kind;
+    std::optional<ComparisonExpression> comparison;
+    std::optional<BetweenExpression> between;
+    std::optional<LogicalOperator> logical_operator;
+    std::unique_ptr<WhereExpression> left;
+    std::unique_ptr<WhereExpression> right;
 };
 
 struct SelectStatement {
     std::string table_name;
     bool select_all;
     std::vector<std::string> column_names;
-    std::optional<WhereClause> where_clause;
+    std::optional<WhereExpression> where_expression;
 };
 // SelectStatement - END
 
