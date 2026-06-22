@@ -424,6 +424,56 @@ int main() {
     }
 
     {
+        const db::sql::Statement statement =
+            parser.parse("DELETE FROM users;");
+
+        assert(std::holds_alternative<db::sql::DeleteStatement>(statement));
+
+        const auto& delete_statement =
+            std::get<db::sql::DeleteStatement>(statement);
+
+        assert(delete_statement.table_name == "users");
+        assert(!delete_statement.where_expression.has_value());
+    }
+
+    {
+        const db::sql::Statement statement =
+            parser.parse("DELETE FROM users WHERE id = 1 OR active = TRUE;");
+
+        assert(std::holds_alternative<db::sql::DeleteStatement>(statement));
+
+        const auto& delete_statement =
+            std::get<db::sql::DeleteStatement>(statement);
+
+        assert(delete_statement.table_name == "users");
+
+        const auto& where = delete_statement.where_expression.value();
+        const auto& left = require_logical_child(where, db::sql::LogicalOperator::Or, true);
+        const auto& right = require_logical_child(where, db::sql::LogicalOperator::Or, false);
+
+        const auto& left_comparison = require_comparison(left);
+        assert(left_comparison.column_name == "id");
+        assert(std::get<db::sql::IntegerLiteral>(left_comparison.value).value == 1);
+
+        const auto& right_comparison = require_comparison(right);
+        assert(right_comparison.column_name == "active");
+        assert(std::get<db::sql::BooleanLiteral>(right_comparison.value).value == true);
+    }
+
+    {
+        bool threw = false;
+        try {
+            parser.parse("DELETE users WHERE id = 1;");
+        } catch (const db::sql::SqlParseError& ex) {
+            threw = true;
+            assert(std::string(ex.what()).find("Unexpected token type") != std::string::npos ||
+                   std::string(ex.what()).find("Unexpected token lexeme") != std::string::npos);
+        }
+
+        assert(threw);
+    }
+
+    {
         bool threw = false;
         try {
             parser.parse("SELECT * FROM users WHERE id;");

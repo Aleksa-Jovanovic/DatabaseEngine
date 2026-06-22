@@ -59,7 +59,7 @@ struct InsertStatement {
 };
 // InsertStatement - END
 
-// SelectStatement - BEGIN
+// WhereExpression - BEGIN
 enum class ComparisonOperator {
     Equal,
     LessThan,
@@ -99,7 +99,9 @@ struct WhereExpression {
     std::unique_ptr<WhereExpression> left;
     std::unique_ptr<WhereExpression> right;
 };
+// WhereExpression - END
 
+// SelectStatement - BEGIN
 struct SelectStatement {
     std::string table_name;
     bool select_all;
@@ -108,10 +110,18 @@ struct SelectStatement {
 };
 // SelectStatement - END
 
+// DeleteStatement - BEGIN
+struct DeleteStatement {
+    std::string table_name;
+    std::optional<WhereExpression> where_expression;
+};
+// DeleteStatement - END
+
 using Statement = std::variant<
     CreateTableStatement,
     InsertStatement,
-    SelectStatement
+    SelectStatement,
+    DeleteStatement
 >;
 
 }  // namespace db::sql

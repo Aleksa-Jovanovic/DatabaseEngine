@@ -78,6 +78,22 @@ int main() {
 
     {
         const std::vector<Token> tokens =
+            tokenizer.tokenize("DELETE FROM users WHERE id >= 42;");
+
+        assert(tokens.size() == 9);
+        assert_token(tokens[0], TokenType::Keyword, "DELETE");
+        assert_token(tokens[1], TokenType::Keyword, "FROM");
+        assert_token(tokens[2], TokenType::Identifier, "users");
+        assert_token(tokens[3], TokenType::Keyword, "WHERE");
+        assert_token(tokens[4], TokenType::Identifier, "id");
+        assert_token(tokens[5], TokenType::GreaterThanOrEqual, ">=");
+        assert_token(tokens[6], TokenType::Number, "42");
+        assert_token(tokens[7], TokenType::Semicolon, ";");
+        assert_token(tokens[8], TokenType::EndOfInput, "");
+    }
+
+    {
+        const std::vector<Token> tokens =
             tokenizer.tokenize("CREATE TABLE flags (enabled BOOLEAN, created_at DATE);");
 
         assert(tokens.size() == 12);

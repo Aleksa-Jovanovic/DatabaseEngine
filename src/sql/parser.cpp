@@ -81,6 +81,10 @@ Statement Parser::parse(const std::string& sql) const {
         return parse_select(tokens);
     }
 
+    if (matches(tokens, 0, TokenType::Keyword, "DELETE")) {
+        return parse_delete(tokens);
+    }
+
     throw SqlParseError("Unsupported SQL statement");
 }
 
@@ -456,6 +460,30 @@ SelectStatement Parser::parse_select(const std::vector<Token>& tokens) {
         table_name.lexeme,
         select_all,
         std::move(column_names),
+        std::move(where_expression)
+    };
+}
+
+DeleteStatement Parser::parse_delete(const std::vector<Token>& tokens) {
+    std::size_t index = 0;
+
+    expect(tokens, index++, TokenType::Keyword, "DELETE");
+    expect(tokens, index++, TokenType::Keyword, "FROM");
+
+    const Token& table_name = expect(tokens, index++, TokenType::Identifier);
+
+    std::optional<WhereExpression> where_expression;
+
+    if (matches(tokens, index, TokenType::Keyword, "WHERE")) {
+        ++index;
+        where_expression = parse_where_expression(tokens, index);
+    }
+
+    expect(tokens, index++, TokenType::Semicolon);
+    expect(tokens, index++, TokenType::EndOfInput);
+
+    return DeleteStatement{
+        table_name.lexeme,
         std::move(where_expression)
     };
 }
