@@ -21,6 +21,8 @@ const std::unordered_set<std::string> kKeywords = {
     "FROM",
     "WHERE",
     "DELETE",
+    "UPDATE",
+    "SET",
     "AND",
     "OR",
     "BETWEEN"

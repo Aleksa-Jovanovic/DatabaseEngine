@@ -474,6 +474,79 @@ int main() {
     }
 
     {
+        const db::sql::Statement statement =
+            parser.parse("UPDATE users SET name = 'Alice' WHERE id = 1;");
+
+        assert(std::holds_alternative<db::sql::UpdateStatement>(statement));
+
+        const auto& update =
+            std::get<db::sql::UpdateStatement>(statement);
+
+        assert(update.table_name == "users");
+        assert(update.assignments.size() == 1);
+        assert(update.assignments[0].column_name == "name");
+        assert(std::get<db::sql::StringLiteral>(update.assignments[0].value).value == "Alice");
+
+        assert(update.where_expression.has_value());
+        const auto& comparison = require_comparison(update.where_expression.value());
+        assert(comparison.column_name == "id");
+        assert(comparison.comparison_operator == db::sql::ComparisonOperator::Equal);
+        assert(std::get<db::sql::IntegerLiteral>(comparison.value).value == 1);
+    }
+
+    {
+        const db::sql::Statement statement =
+            parser.parse("UPDATE users SET name = 'Alice', active = TRUE WHERE created_at BETWEEN DATE '2026-01-01' AND DATE '2026-12-31';");
+
+        assert(std::holds_alternative<db::sql::UpdateStatement>(statement));
+
+        const auto& update =
+            std::get<db::sql::UpdateStatement>(statement);
+
+        assert(update.table_name == "users");
+        assert(update.assignments.size() == 2);
+
+        assert(update.assignments[0].column_name == "name");
+        assert(std::get<db::sql::StringLiteral>(update.assignments[0].value).value == "Alice");
+
+        assert(update.assignments[1].column_name == "active");
+        assert(std::get<db::sql::BooleanLiteral>(update.assignments[1].value).value == true);
+
+        const auto& between = require_between(update.where_expression.value());
+        assert(between.column_name == "created_at");
+        assert(std::get<db::sql::DateLiteral>(between.lower_bound).value == "2026-01-01");
+        assert(std::get<db::sql::DateLiteral>(between.upper_bound).value == "2026-12-31");
+    }
+
+    {
+        const db::sql::Statement statement =
+            parser.parse("UPDATE users SET active = FALSE;");
+
+        assert(std::holds_alternative<db::sql::UpdateStatement>(statement));
+
+        const auto& update =
+            std::get<db::sql::UpdateStatement>(statement);
+
+        assert(update.table_name == "users");
+        assert(update.assignments.size() == 1);
+        assert(update.assignments[0].column_name == "active");
+        assert(std::get<db::sql::BooleanLiteral>(update.assignments[0].value).value == false);
+        assert(!update.where_expression.has_value());
+    }
+
+    {
+        bool threw = false;
+        try {
+            parser.parse("UPDATE users SET WHERE id = 1;");
+        } catch (const db::sql::SqlParseError& ex) {
+            threw = true;
+            assert(std::string(ex.what()).find("Unexpected token type") != std::string::npos);
+        }
+
+        assert(threw);
+    }
+
+    {
         bool threw = false;
         try {
             parser.parse("SELECT * FROM users WHERE id;");

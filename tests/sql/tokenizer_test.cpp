@@ -94,6 +94,29 @@ int main() {
 
     {
         const std::vector<Token> tokens =
+            tokenizer.tokenize("UPDATE users SET name = 'Alice', active = TRUE WHERE id <= 42;");
+
+        assert(tokens.size() == 16);
+        assert_token(tokens[0], TokenType::Keyword, "UPDATE");
+        assert_token(tokens[1], TokenType::Identifier, "users");
+        assert_token(tokens[2], TokenType::Keyword, "SET");
+        assert_token(tokens[3], TokenType::Identifier, "name");
+        assert_token(tokens[4], TokenType::Equals, "=");
+        assert_token(tokens[5], TokenType::String, "Alice");
+        assert_token(tokens[6], TokenType::Comma, ",");
+        assert_token(tokens[7], TokenType::Identifier, "active");
+        assert_token(tokens[8], TokenType::Equals, "=");
+        assert_token(tokens[9], TokenType::Boolean, "TRUE");
+        assert_token(tokens[10], TokenType::Keyword, "WHERE");
+        assert_token(tokens[11], TokenType::Identifier, "id");
+        assert_token(tokens[12], TokenType::LessThanOrEqual, "<=");
+        assert_token(tokens[13], TokenType::Number, "42");
+        assert_token(tokens[14], TokenType::Semicolon, ";");
+        assert_token(tokens[15], TokenType::EndOfInput, "");
+    }
+
+    {
+        const std::vector<Token> tokens =
             tokenizer.tokenize("CREATE TABLE flags (enabled BOOLEAN, created_at DATE);");
 
         assert(tokens.size() == 12);

@@ -117,11 +117,25 @@ struct DeleteStatement {
 };
 // DeleteStatement - END
 
+// UpdateStatement - BEGIN
+struct AssignmentExpression {
+    std::string column_name;
+    ValueNode value;
+};
+
+struct UpdateStatement {
+    std::string table_name;
+    std::vector<AssignmentExpression> assignments;
+    std::optional<WhereExpression> where_expression;
+};
+// UpdateStatement - END
+
 using Statement = std::variant<
     CreateTableStatement,
     InsertStatement,
     SelectStatement,
-    DeleteStatement
+    DeleteStatement,
+    UpdateStatement
 >;
 
 }  // namespace db::sql

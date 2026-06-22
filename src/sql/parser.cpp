@@ -85,6 +85,10 @@ Statement Parser::parse(const std::string& sql) const {
         return parse_delete(tokens);
     }
 
+    if (matches(tokens, 0, TokenType::Keyword, "UPDATE")) {
+        return parse_update(tokens);
+    }
+
     throw SqlParseError("Unsupported SQL statement");
 }
 
@@ -484,6 +488,55 @@ DeleteStatement Parser::parse_delete(const std::vector<Token>& tokens) {
 
     return DeleteStatement{
         table_name.lexeme,
+        std::move(where_expression)
+    };
+}
+
+UpdateStatement Parser::parse_update(const std::vector<Token>& tokens) {
+    std::size_t index = 0;
+
+    expect(tokens, index++, TokenType::Keyword, "UPDATE");
+
+    const Token& table_name = expect(tokens, index++, TokenType::Identifier);
+
+    expect(tokens, index++, TokenType::Keyword, "SET");
+
+    std::vector<AssignmentExpression> assignments;
+
+    while (true) {
+        const Token& column_name = expect(tokens, index++, TokenType::Identifier);
+        expect(tokens, index++, TokenType::Equals);
+
+        assignments.push_back(AssignmentExpression{
+            column_name.lexeme,
+            parse_value(tokens, index)
+        });
+
+        if (matches(tokens, index, TokenType::Comma)) {
+            ++index;
+            continue;
+        }
+
+        break;
+    }
+
+    if (assignments.empty()) {
+        throw SqlParseError(make_parser_error("UPDATE must define at least one assignment", index));
+    }
+
+    std::optional<WhereExpression> where_expression;
+
+    if (matches(tokens, index, TokenType::Keyword, "WHERE")) {
+        ++index;
+        where_expression = parse_where_expression(tokens, index);
+    }
+
+    expect(tokens, index++, TokenType::Semicolon);
+    expect(tokens, index++, TokenType::EndOfInput);
+
+    return UpdateStatement{
+        table_name.lexeme,
+        std::move(assignments),
         std::move(where_expression)
     };
 }

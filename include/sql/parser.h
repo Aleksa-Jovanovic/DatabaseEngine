@@ -58,6 +58,7 @@ private:
     static InsertStatement parse_insert(const std::vector<Token>& tokens);
     static SelectStatement parse_select(const std::vector<Token>& tokens);
     static DeleteStatement parse_delete(const std::vector<Token>& tokens);
+    static UpdateStatement parse_update(const std::vector<Token>& tokens);
 };
 
 }  // namespace db::sql
