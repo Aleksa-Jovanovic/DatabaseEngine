@@ -99,9 +99,21 @@ initial integration-test coverage.
 - table definitions
 - index definitions
 - metadata persistence
+- later improve catalog validation to return structured errors (for example
+  `CatalogValidationError`) instead of only boolean success/failure
 
 Goal:
 Track database objects and schema.
+
+Current status:
+Phase 7 is in progress.
+The project now has a first catalog layer with schema metadata,
+catalog-level table and index definitions, a `Catalog` registry that can
+create and look up table definitions, a serializer-backed metadata file
+format for catalog persistence, reopen support for file-backed catalogs, and
+a bridge from catalog definitions into runtime `TableMetadata` plus `Table`
+reconstruction through `open_table(...)`, along with initial table-definition
+validation rules around primary keys, indexes, and schema consistency.
 
 ## Phase 8 - SQL layer
 - tokenizer
@@ -111,6 +123,18 @@ Track database objects and schema.
 
 Goal:
 Allow simple database interaction through SQL-like syntax.
+
+Current status:
+Phase 8 is functionally complete for the current parser/tokenizer/AST
+milestone.
+The project now has a first SQL tokenizer that classifies keywords,
+identifiers, type names, numeric literals, string literals, punctuation, and
+an explicit end-of-input token, along with typed AST and parser paths for
+`CREATE TABLE`, `INSERT`, `SELECT`, `DELETE`, and `UPDATE` statements.
+`INSERT` parsing supports both schema-order values and optional named column
+lists, `SELECT` parsing supports `*` and explicit projected columns, and
+`WHERE` parsing now builds expression trees for comparison predicates,
+`BETWEEN`, `AND`, and `OR` with SQL-style precedence.
 
 ## Phase 9 - Execution
 - sequential scan

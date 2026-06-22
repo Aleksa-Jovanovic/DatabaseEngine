@@ -14,6 +14,9 @@ struct IndexMetadata {
     bool is_unique = true;
 };
 
+// TableMetadata is the table-local runtime metadata used to construct a Table.
+// Later, the catalog will store the persistent/global table definitions from
+// which TableMetadata instances are derived when table objects are rebuilt.
 struct TableMetadata {
     std::string table_name;
     std::string heap_file_name;
