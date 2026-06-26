@@ -1,5 +1,10 @@
 #include "table/table.h"
 
+#include "table/row_serializer.h"
+
+#include <string>
+#include <vector>
+
 namespace db::table {
 
 Table::Table(
@@ -22,19 +27,18 @@ Table::Table(const TableMetadata& metadata)
 }
 
 std::optional<RowId> Table::insert(const Row& row) {
-    // Bridge the logical table row into the current variable-length heap record shape.
-    VarRecord record{row.key, row.value};
+    const std::vector<char> serialized_row = RowSerializer::serialize(row);
+    const std::string payload(serialized_row.begin(), serialized_row.end());
 
-    // First insert the full row into heap storage to get its physical location.
+    VarRecord record{row.key, payload};
+
     const auto row_id = heap_file_.insert_var_record(record);
     if (!row_id.has_value()) {
         return std::nullopt;
     }
 
-    // Then index that physical row location by the row's primary key.
     const auto index_result = primary_index_.insert(row.key, row_id.value());
     if (!index_result.has_value()) {
-        // For now, leave rollback out of scope and report failure if index insert fails.
         return std::nullopt;
     }
 
@@ -55,7 +59,11 @@ std::optional<Row> Table::get_by_key(std::uint32_t key) {
     }
 
     // Convert the heap record back into the logical table row type.
-    return Row{record->key, record->value};
+    return RowSerializer::deserialize(
+        record->key,
+        record->value.data(),
+        record->value.size()
+    );
 }
 
 bool Table::update_by_key(std::uint32_t key, const Row& updated_row) {
@@ -72,7 +80,10 @@ bool Table::update_by_key(std::uint32_t key, const Row& updated_row) {
         return false;
     }
 
-    VarRecord updated_record{updated_row.key, updated_row.value};
+    const std::vector<char> serialized_row = RowSerializer::serialize(updated_row);
+    const std::string payload(serialized_row.begin(), serialized_row.end());
+
+    VarRecord updated_record{updated_row.key, payload};
 
     // Update the heap row using the located RowId.
     const auto updated_row_id =

@@ -45,19 +45,31 @@ the later catalog phase.
 ## Current row model
 The current table abstraction now uses a table-layer `Row` type:
 - `key`
-- `value` as `std::string`
+- `values` as a vector of typed field values
 
-The current row model is richer than the old fixed-size `Record`, but it is
-still intentionally simple and only represents:
-- one integer primary key
-- one variable-length string value
+Current supported field values:
+- integer values
+- string values
+- boolean values
+- date values represented as a small `DateValue` wrapper around a string
+
+The row key is still stored separately from the serialized field payload:
+- `Row::key` is the primary key used by the current B+ tree path
+- `Row::values` is the logical table row payload
 
 The current table layer also has a `RowSerializer` with the byte layout:
-- `[key][value_length][value_bytes]`
+- `[field_count]`
+- for each field:
+  - `[type_tag]`
+  - `[field_payload]`
 
-At the moment, the `Table` implementation still bridges through the existing
-`VarRecord` heap-storage path because that storage shape already matches the
-current `Row` model closely.
+The `Table` implementation stores typed rows through the existing
+variable-length heap path:
+- `VarRecord::key` stores the row primary key
+- `VarRecord::value` stores the serialized `Row::values` byte payload
+
+This lets the table layer support real multi-field rows without redesigning
+the heap-file or slotted-page storage format yet.
 
 ## Current lookup flow
 The current key-based table lookup works like this:
@@ -71,10 +83,12 @@ This keeps the architecture aligned with a normal heap-plus-index design:
 
 ## Current insert flow
 The current table insert works like this:
-1. convert the logical `Row` into the current variable-length heap record shape
-2. insert the full row into the heap file
-3. receive a `RowId` for the inserted row
-4. insert `key -> RowId` into the primary B+ tree
+1. serialize `Row::values` into a byte payload with `RowSerializer`
+2. store the payload in `VarRecord::value` and the primary key in
+   `VarRecord::key`
+3. insert the full `VarRecord` into the heap file
+4. receive a `RowId` for the inserted row
+5. insert `key -> RowId` into the primary B+ tree
 
 The current implementation does not yet attempt rollback if the heap insert
 succeeds but the index insert fails.
@@ -142,9 +156,10 @@ The current table integration test verifies:
 - persistence across reopen through heap and primary index files
 
 The current row-serialization test verifies:
-- serialize one `Row` into bytes
+- serialize typed row fields into bytes
 - deserialize bytes back into one `Row`
-- empty-string round trip
+- integer, string, boolean, and date field round trips
+- empty field-list round trip
 - invalid or truncated input rejection
 
 ## Current cache-size behavior
@@ -161,10 +176,11 @@ into separate configuration fields.
 ## Current simplifications
 - one heap file per table
 - one active primary B+ tree index
-- simple `Row { key, value }` row model
+- typed `Row { key, values }` row model
 - `uint32_t` primary key
 - current heap bridge still reuses `VarRecord`
-- no schema-aware row representation yet
+- row values are not schema-validated yet
+- primary key is still stored separately from the logical field vector
 - no secondary-index backfill or maintenance yet
 - no delete path yet
 - no rollback if heap insert succeeds and index insert fails

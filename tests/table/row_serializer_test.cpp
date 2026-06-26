@@ -1,37 +1,61 @@
 #include <cassert>
 #include <cstdint>
 #include <iostream>
+#include <string>
 #include <vector>
+#include <variant>
 
 #include "table/row.h"
 #include "table/row_serializer.h"
 
 int main() {
     {
-        db::table::Row row{42, "hello"};
+        db::table::Row row{
+            42,
+            {
+                std::int64_t{42},
+                std::string{"Alice"},
+                true,
+                db::table::DateValue{"2026-06-26"}
+            }
+        };
 
         std::vector<char> bytes = db::table::RowSerializer::serialize(row);
-        auto decoded = db::table::RowSerializer::deserialize(bytes.data(), bytes.size());
+        auto decoded = db::table::RowSerializer::deserialize(
+            row.key,
+            bytes.data(),
+            bytes.size()
+        );
 
         assert(decoded.has_value());
         assert(decoded->key == 42);
-        assert(decoded->value == "hello");
+        assert(decoded->values.size() == 4);
+
+        assert(std::get<std::int64_t>(decoded->values[0]) == 42);
+        assert(std::get<std::string>(decoded->values[1]) == "Alice");
+        assert(std::get<bool>(decoded->values[2]) == true);
+        assert(std::get<db::table::DateValue>(decoded->values[3]).value == "2026-06-26");
     }
 
     {
-        db::table::Row row{7, ""};
+        db::table::Row row{7, {}};
 
         std::vector<char> bytes = db::table::RowSerializer::serialize(row);
-        auto decoded = db::table::RowSerializer::deserialize(bytes.data(), bytes.size());
+        auto decoded = db::table::RowSerializer::deserialize(
+            row.key,
+            bytes.data(),
+            bytes.size()
+        );
 
         assert(decoded.has_value());
         assert(decoded->key == 7);
-        assert(decoded->value.empty());
+        assert(decoded->values.empty());
     }
 
     {
         std::vector<char> invalid_bytes{1, 2, 3};
         auto decoded = db::table::RowSerializer::deserialize(
+            99,
             invalid_bytes.data(),
             invalid_bytes.size()
         );
@@ -40,7 +64,7 @@ int main() {
     }
 
     {
-        auto decoded = db::table::RowSerializer::deserialize(nullptr, 0);
+        auto decoded = db::table::RowSerializer::deserialize(99, nullptr, 0);
         assert(!decoded.has_value());
     }
 

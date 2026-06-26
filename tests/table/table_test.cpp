@@ -1,8 +1,38 @@
 #include <cassert>
 #include <filesystem>
 #include <iostream>
+#include <string>
+#include <variant>
 
 #include "table/table.h"
+
+namespace {
+
+db::table::Row make_user_row(std::uint32_t key, const std::string& name, bool active) {
+    return db::table::Row{
+        key,
+        {
+            std::int64_t{key},
+            name,
+            active
+        }
+    };
+}
+
+void assert_user_row(
+    const db::table::Row& row,
+    std::uint32_t expected_key,
+    const std::string& expected_name,
+    bool expected_active
+) {
+    assert(row.key == expected_key);
+    assert(row.values.size() == 3);
+    assert(std::get<std::int64_t>(row.values[0]) == expected_key);
+    assert(std::get<std::string>(row.values[1]) == expected_name);
+    assert(std::get<bool>(row.values[2]) == expected_active);
+}
+
+}  // namespace
 
 int main() {
     const std::string heap_file_name = "table_test_heap.db";
@@ -17,9 +47,9 @@ int main() {
         auto missing_before_insert = table.get_by_key(42);
         assert(!missing_before_insert.has_value());
 
-        auto row_id_1 = table.insert(db::table::Row{10, "100"});
-        auto row_id_2 = table.insert(db::table::Row{20, "200"});
-        auto row_id_3 = table.insert(db::table::Row{30, "300"});
+        auto row_id_1 = table.insert(make_user_row(10, "Alice", true));
+        auto row_id_2 = table.insert(make_user_row(20, "Bob", false));
+        auto row_id_3 = table.insert(make_user_row(30, "Carol", true));
 
         assert(row_id_1.has_value());
         assert(row_id_2.has_value());
@@ -31,40 +61,41 @@ int main() {
         auto missing = table.get_by_key(999);
 
         assert(found_10.has_value());
-        assert(found_10->key == 10);
-        assert(found_10->value == "100");
+        assert_user_row(found_10.value(), 10, "Alice", true);
 
         assert(found_20.has_value());
-        assert(found_20->key == 20);
-        assert(found_20->value == "200");
+        assert_user_row(found_20.value(), 20, "Bob", false);
 
         assert(found_30.has_value());
-        assert(found_30->key == 30);
-        assert(found_30->value == "300");
+        assert_user_row(found_30.value(), 30, "Carol", true);
 
         assert(!missing.has_value());
 
         // Duplicate primary key should fail because the current B+ tree rejects duplicates.
-        auto duplicate_insert = table.insert(db::table::Row{20, "999"});
+        auto duplicate_insert = table.insert(make_user_row(20, "Duplicate", true));
         assert(!duplicate_insert.has_value());
 
         // Same-key updates should succeed and be visible through indexed lookup.
-        auto update_result = table.update_by_key(20, db::table::Row{20, "999"});
+        auto update_result = table.update_by_key(20, make_user_row(20, "Bobby", true));
         assert(update_result);
 
         auto relocation_update = table.update_by_key(
             20,
-            db::table::Row{20, "this is a much longer string that should be more likely to move"}
+            make_user_row(20, "this is a much longer string that should be more likely to move", false)
         );
         assert(relocation_update);
 
         found_20 = table.get_by_key(20);
         assert(found_20.has_value());
-        assert(found_20->key == 20);
-        assert(found_20->value == "this is a much longer string that should be more likely to move");
+        assert_user_row(
+            found_20.value(),
+            20,
+            "this is a much longer string that should be more likely to move",
+            false
+        );
 
         // Changing the primary key is out of scope for the first update path.
-        auto invalid_key_change = table.update_by_key(20, db::table::Row{21, "111"});
+        auto invalid_key_change = table.update_by_key(20, make_user_row(21, "Wrong key", true));
         assert(!invalid_key_change);
     }
 
@@ -78,16 +109,18 @@ int main() {
         auto missing = reopened_table.get_by_key(999);
 
         assert(found_10.has_value());
-        assert(found_10->key == 10);
-        assert(found_10->value == "100");
+        assert_user_row(found_10.value(), 10, "Alice", true);
 
         assert(found_20.has_value());
-        assert(found_20->key == 20);
-        assert(found_20->value == "this is a much longer string that should be more likely to move");
+        assert_user_row(
+            found_20.value(),
+            20,
+            "this is a much longer string that should be more likely to move",
+            false
+        );
 
         assert(found_30.has_value());
-        assert(found_30->key == 30);
-        assert(found_30->value == "300");
+        assert_user_row(found_30.value(), 30, "Carol", true);
 
         assert(!missing.has_value());
     }
