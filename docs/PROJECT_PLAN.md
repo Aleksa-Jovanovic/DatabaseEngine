@@ -87,9 +87,10 @@ Current status:
 Phase 6 is functionally complete for the current scoped milestone.
 The project now has a first `Table` abstraction that combines one heap file
 with one primary B+ tree index, a lightweight `TableMetadata` structure for
-table configuration plus index metadata tracking, a typed multi-field
-table-layer `Row` model plus row-serialization support, support for table-level insert,
-key-based lookup, and same-key update behavior with index repair when
+table configuration, column metadata, and index metadata tracking, a typed
+multi-field table-layer `Row` model plus row-serialization support,
+schema-backed row validation for insert and update, support for table-level
+insert, key-based lookup, and same-key update behavior with index repair when
 variable-length row updates move the stored row, and a first secondary-index
 registration path plus metadata-driven runtime reconstruction, all with
 initial integration-test coverage.

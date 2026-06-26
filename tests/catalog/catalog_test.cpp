@@ -81,6 +81,19 @@ int main() {
     assert(built_metadata->primary_index_file_name == "users_primary_index.db");
     assert(built_metadata->cache_size == 16);
 
+    assert(built_metadata->columns.size() == 3);
+    assert(built_metadata->columns[0].name == "id");
+    assert(built_metadata->columns[0].type == db::table::ColumnType::Integer);
+    assert(built_metadata->columns[0].is_primary_key);
+
+    assert(built_metadata->columns[1].name == "name");
+    assert(built_metadata->columns[1].type == db::table::ColumnType::String);
+    assert(!built_metadata->columns[1].is_primary_key);
+
+    assert(built_metadata->columns[2].name == "is_active");
+    assert(built_metadata->columns[2].type == db::table::ColumnType::Boolean);
+    assert(!built_metadata->columns[2].is_primary_key);
+
     assert(built_metadata->secondary_indexes.size() == 1);
     assert(built_metadata->secondary_indexes[0].index_name == "users_name_idx");
     assert(built_metadata->secondary_indexes[0].column_name == "name");

@@ -23,7 +23,13 @@ Current metadata fields:
 - heap file name
 - primary index file name
 - shared cache size
+- column metadata entries
 - a list of secondary-index metadata entries
+
+Current column metadata fields:
+- column name
+- column type
+- whether the column is the primary key
 
 Current secondary-index metadata fields:
 - index name
@@ -93,12 +99,23 @@ The current table insert works like this:
 The current implementation does not yet attempt rollback if the heap insert
 succeeds but the index insert fails.
 
+When column metadata is available, inserts validate the row before writing:
+- the number of row values must match the number of columns
+- each row value type must match the corresponding column type
+- the primary-key column must be an integer
+- the primary-key column value must match `Row::key`
+
+Direct table construction without column metadata remains supported for older
+tests and lower-level usage. In that mode, row validation is intentionally
+skipped.
+
 ## Current update behavior
 The current table layer has a first `update_by_key(...)` implementation.
 
 Current behavior:
 - resolve the key through the primary index
 - get the corresponding `RowId`
+- validate the updated row when column metadata is available
 - update the heap record through the variable-length storage path
 - repair the primary-index mapping if the updated row moves to a new `RowId`
 
@@ -153,6 +170,7 @@ The current table integration test verifies:
 - same-key update behavior
 - index repair when a variable-length update moves the row to a new physical location
 - rejection of primary-key-changing updates
+- schema-backed row validation for field count, field type, and primary-key value
 - persistence across reopen through heap and primary index files
 
 The current row-serialization test verifies:
@@ -179,7 +197,7 @@ into separate configuration fields.
 - typed `Row { key, values }` row model
 - `uint32_t` primary key
 - current heap bridge still reuses `VarRecord`
-- row values are not schema-validated yet
+- row values are schema-validated only when `TableMetadata` contains columns
 - primary key is still stored separately from the logical field vector
 - no secondary-index backfill or maintenance yet
 - no delete path yet

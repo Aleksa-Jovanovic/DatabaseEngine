@@ -10,6 +10,25 @@
 
 namespace db::catalog {
 
+namespace {
+
+table::ColumnType to_table_column_type(ColumnType type) {
+    switch (type) {
+        case ColumnType::Integer:
+            return table::ColumnType::Integer;
+        case ColumnType::String:
+            return table::ColumnType::String;
+        case ColumnType::Boolean:
+            return table::ColumnType::Boolean;
+        case ColumnType::Date:
+            return table::ColumnType::Date;
+    }
+
+    return table::ColumnType::String;
+}
+
+}  // namespace
+
 Catalog::Catalog(const CatalogMetadata& metadata) : metadata_(metadata) {}
 
 Catalog::Catalog(const std::string& metadata_file_name)
@@ -73,6 +92,15 @@ std::optional<table::TableMetadata> Catalog::build_table_metadata_from_definitio
 ) const {
     std::string primary_index_file_name;
     std::vector<table::IndexMetadata> secondary_indexes;
+    std::vector<table::ColumnMetadata> columns;
+
+    for (const ColumnDefinition& column : table_definition.schema.columns()) {
+        columns.push_back(table::ColumnMetadata{
+            column.name,
+            to_table_column_type(column.type),
+            column.is_primary_key
+        });
+    }
 
     // Catalog keeps all indexes in one list. Runtime TableMetadata still
     // expects one explicit primary index plus a list of secondary indexes.
@@ -107,6 +135,7 @@ std::optional<table::TableMetadata> Catalog::build_table_metadata_from_definitio
         table_definition.heap_file_name,
         primary_index_file_name,
         cache_size,
+        std::move(columns),
         std::move(secondary_indexes)
     };
 }

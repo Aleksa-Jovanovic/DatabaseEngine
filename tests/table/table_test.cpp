@@ -37,9 +37,13 @@ void assert_user_row(
 int main() {
     const std::string heap_file_name = "table_test_heap.db";
     const std::string index_file_name = "table_test_index.db";
+    const std::string schema_heap_file_name = "table_schema_test_heap.db";
+    const std::string schema_index_file_name = "table_schema_test_index.db";
 
     std::filesystem::remove(heap_file_name);
     std::filesystem::remove(index_file_name);
+    std::filesystem::remove(schema_heap_file_name);
+    std::filesystem::remove(schema_index_file_name);
 
     {
         db::table::Table table("users", heap_file_name, index_file_name, 8);
@@ -125,8 +129,70 @@ int main() {
         assert(!missing.has_value());
     }
 
+    {
+        db::table::TableMetadata metadata{
+            "schema_users",
+            schema_heap_file_name,
+            schema_index_file_name,
+            8,
+            {
+                {"id", db::table::ColumnType::Integer, true},
+                {"name", db::table::ColumnType::String, false},
+                {"active", db::table::ColumnType::Boolean, false}
+            },
+            {}
+        };
+
+        db::table::Table table(metadata);
+
+        auto valid_insert = table.insert(make_user_row(100, "Dora", true));
+        assert(valid_insert.has_value());
+
+        auto found = table.get_by_key(100);
+        assert(found.has_value());
+        assert_user_row(found.value(), 100, "Dora", true);
+
+        db::table::Row missing_field{
+            101,
+            {
+                std::int64_t{101},
+                std::string{"Missing Active"}
+            }
+        };
+        assert(!table.insert(missing_field).has_value());
+
+        db::table::Row wrong_type{
+            102,
+            {
+                std::int64_t{102},
+                std::int64_t{999},
+                true
+            }
+        };
+        assert(!table.insert(wrong_type).has_value());
+
+        db::table::Row mismatched_primary_key{
+            103,
+            {
+                std::int64_t{999},
+                std::string{"Wrong Id"},
+                true
+            }
+        };
+        assert(!table.insert(mismatched_primary_key).has_value());
+
+        assert(!table.update_by_key(100, wrong_type));
+        assert(table.update_by_key(100, make_user_row(100, "Dora Updated", false)));
+
+        found = table.get_by_key(100);
+        assert(found.has_value());
+        assert_user_row(found.value(), 100, "Dora Updated", false);
+    }
+
     std::filesystem::remove(heap_file_name);
     std::filesystem::remove(index_file_name);
+    std::filesystem::remove(schema_heap_file_name);
+    std::filesystem::remove(schema_index_file_name);
 
     std::cout << "Table test passed.\n";
     return 0;

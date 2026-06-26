@@ -50,6 +50,7 @@ private:
     std::unordered_map<std::string, SecondaryIndexInfo> secondary_indexes_;
 
     void load_secondary_indexes_from_metadata();
+    bool validate_row(const Row& row) const;
 };
 
 }  // namespace db::table

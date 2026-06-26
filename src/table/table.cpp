@@ -27,6 +27,10 @@ Table::Table(const TableMetadata& metadata)
 }
 
 std::optional<RowId> Table::insert(const Row& row) {
+    if (!validate_row(row)) {
+        return std::nullopt;
+    }
+
     const std::vector<char> serialized_row = RowSerializer::serialize(row);
     const std::string payload(serialized_row.begin(), serialized_row.end());
 
@@ -67,6 +71,10 @@ std::optional<Row> Table::get_by_key(std::uint32_t key) {
 }
 
 bool Table::update_by_key(std::uint32_t key, const Row& updated_row) {
+    if (!validate_row(updated_row)) {
+        return false;
+    }
+
     // For the current primary-index design, changing the key would require
     // removing the old index entry and inserting a new one.
     // Keep the first version simple and only allow same-key updates.
@@ -189,6 +197,59 @@ void Table::load_secondary_indexes_from_metadata() {
 
         secondary_indexes_.emplace(index_metadata.index_name, std::move(info));
     }
+}
+
+bool Table::validate_row(const Row& row) const {
+    if (metadata_.columns.empty()) {
+        return true;
+    }
+
+    if (row.values.size() != metadata_.columns.size()) {
+        return false;
+    }
+
+    for (std::size_t i = 0; i < metadata_.columns.size(); ++i) {
+        const ColumnMetadata& column = metadata_.columns[i];
+        const FieldValue& value = row.values[i];
+
+        switch (column.type) {
+            case ColumnType::Integer:
+                if (!std::holds_alternative<std::int64_t>(value)) {
+                    return false;
+                }
+                break;
+
+            case ColumnType::String:
+                if (!std::holds_alternative<std::string>(value)) {
+                    return false;
+                }
+                break;
+
+            case ColumnType::Boolean:
+                if (!std::holds_alternative<bool>(value)) {
+                    return false;
+                }
+                break;
+
+            case ColumnType::Date:
+                if (!std::holds_alternative<DateValue>(value)) {
+                    return false;
+                }
+                break;
+        }
+
+        if (column.is_primary_key) {
+            if (!std::holds_alternative<std::int64_t>(value)) {
+                return false;
+            }
+
+            if (std::get<std::int64_t>(value) != static_cast<std::int64_t>(row.key)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 }  // namespace db::table

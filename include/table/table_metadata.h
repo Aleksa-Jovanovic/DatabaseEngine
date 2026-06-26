@@ -6,6 +6,19 @@
 
 namespace db::table {
 
+enum class ColumnType {
+    Integer,
+    String,
+    Boolean,
+    Date
+};
+
+struct ColumnMetadata {
+    std::string name;
+    ColumnType type;
+    bool is_primary_key = false;
+};
+
 struct IndexMetadata {
     std::string index_name;
     std::string column_name;
@@ -22,6 +35,7 @@ struct TableMetadata {
     std::string heap_file_name;
     std::string primary_index_file_name;
     std::size_t cache_size = 8;
+    std::vector<ColumnMetadata> columns;
     std::vector<IndexMetadata> secondary_indexes;
 };
 
