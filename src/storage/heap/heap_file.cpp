@@ -174,6 +174,33 @@ std::optional<VarRecord> HeapFile::get_var_record(const RowId& row_id) {
     return record;
 }
 
+std::vector<std::pair<RowId, VarRecord>> HeapFile::scan_var_records() {
+    std::vector<std::pair<RowId, VarRecord>> records;
+
+    for (std::uint32_t page_id = 0; page_id < page_cache_manager_.get_page_count(); ++page_id) {
+        Page* page_ptr = page_cache_manager_.fetch_page(page_id);
+        if (page_ptr == nullptr) {
+            continue;
+        }
+
+        SlottedPage slotted_page(*page_ptr);
+
+        for (std::uint16_t slot_index = 0; slot_index < slotted_page.slot_count(); ++slot_index) {
+            auto record = slotted_page.var_record_at(slot_index);
+            if (record.has_value()) {
+                records.push_back({
+                    RowId{page_id, slot_index},
+                    record.value()
+                });
+            }
+        }
+
+        page_cache_manager_.unpin_page(page_id, false);
+    }
+
+    return records;
+}
+
 std::optional<Record> HeapFile::find(std::uint32_t key) {
     // Heap file lookup is a full scan in the current version.
     for (std::uint32_t page_id = 0; page_id < page_cache_manager_.get_page_count(); ++page_id) {

@@ -5,6 +5,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "index/bplustree.h"
 #include "storage/heap/heap_file.h"
@@ -26,6 +27,7 @@ public:
 
     std::optional<RowId> insert(const Row& row);
     std::optional<Row> get_by_key(std::uint32_t key);
+    std::vector<Row> scan();
     bool update_by_key(std::uint32_t key, const Row& updated_row);
     bool delete_by_key(std::uint32_t key);
 

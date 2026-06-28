@@ -2,6 +2,8 @@
 
 #include <optional>
 #include <string>
+#include <utility>
+#include <vector>
 #include "storage/cache/page_cache_manager.h"
 #include "storage/page/page.h"
 #include "storage/page/slotted_page.h"
@@ -32,6 +34,8 @@ public:
     // Read the variable-length record at the given row location.
     // Returns std::nullopt if the row id is invalid or deleted.
     std::optional<VarRecord> get_var_record(const RowId& row_id);
+
+    std::vector<std::pair<RowId, VarRecord>> scan_var_records();
 
     // Scan the heap file and return the first record with the matching key.
     // Returns std::nullopt if no matching record is found.

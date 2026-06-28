@@ -3,6 +3,7 @@
 #include <iostream>
 #include <string>
 #include <variant>
+#include <vector>
 
 #include "table/table.h"
 
@@ -30,6 +31,20 @@ void assert_user_row(
     assert(std::get<std::int64_t>(row.values[0]) == expected_key);
     assert(std::get<std::string>(row.values[1]) == expected_name);
     assert(std::get<bool>(row.values[2]) == expected_active);
+}
+
+const db::table::Row& require_row_by_key(
+    const std::vector<db::table::Row>& rows,
+    std::uint32_t key
+) {
+    for (const auto& row : rows) {
+        if (row.key == key) {
+            return row;
+        }
+    }
+
+    assert(false);
+    return rows[0];
 }
 
 }  // namespace
@@ -75,6 +90,12 @@ int main() {
 
         assert(!missing.has_value());
 
+        auto scanned_rows = table.scan();
+        assert(scanned_rows.size() == 3);
+        assert_user_row(require_row_by_key(scanned_rows, 10), 10, "Alice", true);
+        assert_user_row(require_row_by_key(scanned_rows, 20), 20, "Bob", false);
+        assert_user_row(require_row_by_key(scanned_rows, 30), 30, "Carol", true);
+
         // Duplicate primary key should fail because the current B+ tree rejects duplicates.
         auto duplicate_insert = table.insert(make_user_row(20, "Duplicate", true));
         assert(!duplicate_insert.has_value());
@@ -94,6 +115,13 @@ int main() {
         assert_user_row(
             found_20.value(),
             20,
+            "this is a much longer string that should be more likely to move",
+            false
+        );
+
+        scanned_rows = table.scan();
+        assert(scanned_rows.size() == 3);
+        assert_user_row(require_row_by_key(scanned_rows, 20), 20,
             "this is a much longer string that should be more likely to move",
             false
         );
@@ -127,6 +155,15 @@ int main() {
         assert_user_row(found_30.value(), 30, "Carol", true);
 
         assert(!missing.has_value());
+
+        auto scanned_rows = reopened_table.scan();
+        assert(scanned_rows.size() == 3);
+        assert_user_row(require_row_by_key(scanned_rows, 10), 10, "Alice", true);
+        assert_user_row(require_row_by_key(scanned_rows, 20), 20,
+            "this is a much longer string that should be more likely to move",
+            false
+        );
+        assert_user_row(require_row_by_key(scanned_rows, 30), 30, "Carol", true);
     }
 
     {
@@ -187,6 +224,10 @@ int main() {
         found = table.get_by_key(100);
         assert(found.has_value());
         assert_user_row(found.value(), 100, "Dora Updated", false);
+
+        auto scanned_rows = table.scan();
+        assert(scanned_rows.size() == 1);
+        assert_user_row(scanned_rows[0], 100, "Dora Updated", false);
     }
 
     std::filesystem::remove(heap_file_name);

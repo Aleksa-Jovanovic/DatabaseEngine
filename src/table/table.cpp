@@ -43,6 +43,9 @@ std::optional<RowId> Table::insert(const Row& row) {
 
     const auto index_result = primary_index_.insert(row.key, row_id.value());
     if (!index_result.has_value()) {
+        // Keep heap scans consistent with indexed lookups if primary-index
+        // insertion fails after the row was already written.
+        heap_file_.delete_record(row_id.value());
         return std::nullopt;
     }
 
@@ -68,6 +71,29 @@ std::optional<Row> Table::get_by_key(std::uint32_t key) {
         record->value.data(),
         record->value.size()
     );
+}
+
+std::vector<Row> Table::scan() {
+    std::vector<Row> rows;
+
+    const auto records = heap_file_.scan_var_records();
+    for (const auto& record_entry : records) {
+        const auto& record = record_entry.second;
+
+        auto row = RowSerializer::deserialize(
+            record.key,
+            record.value.data(),
+            record.value.size()
+        );
+
+        if (!row.has_value()) {
+            continue;
+        }
+
+        rows.push_back(row.value());
+    }
+
+    return rows;
 }
 
 bool Table::update_by_key(std::uint32_t key, const Row& updated_row) {

@@ -87,6 +87,19 @@ This keeps the architecture aligned with a normal heap-plus-index design:
 - heap file stores full row payload
 - primary index stores key-to-row-location mapping
 
+## Current scan flow
+The table layer now exposes a first full-scan path through `Table::scan()`.
+
+The scan flow works like this:
+1. ask the heap file to scan all variable-length records
+2. deserialize each `VarRecord::value` back into row field values
+3. reattach `VarRecord::key` as `Row::key`
+4. return the visible logical rows to the caller
+
+This is the foundation for the first SQL executor implementation. Early
+`SELECT` execution can scan all rows and apply filtering/projection in memory
+before index-scan optimization exists.
+
 ## Current insert flow
 The current table insert works like this:
 1. serialize `Row::values` into a byte payload with `RowSerializer`
@@ -96,8 +109,9 @@ The current table insert works like this:
 4. receive a `RowId` for the inserted row
 5. insert `key -> RowId` into the primary B+ tree
 
-The current implementation does not yet attempt rollback if the heap insert
-succeeds but the index insert fails.
+If the heap insert succeeds but primary-index insertion fails, the table layer
+deletes the just-written heap row. This keeps heap scans consistent with
+primary-key lookups when duplicate keys or other index failures happen.
 
 When column metadata is available, inserts validate the row before writing:
 - the number of row values must match the number of columns
@@ -166,7 +180,9 @@ Current limitation:
 The current table integration test verifies:
 - table-level insert
 - table-level lookup by primary key
+- table-level full scan
 - duplicate primary-key rejection through the table API
+- rollback of the heap row when primary-index insertion fails
 - same-key update behavior
 - index repair when a variable-length update moves the row to a new physical location
 - rejection of primary-key-changing updates
@@ -209,6 +225,7 @@ For the current project scope, Phase 6 now has:
 - metadata-based table construction
 - row serialization support
 - primary-index-backed insert and lookup
+- full table scan support for the first execution layer
 - same-key update behavior with index repair on row relocation
 - first secondary-index metadata and registration scaffolding
 
