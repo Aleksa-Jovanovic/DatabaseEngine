@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -14,6 +15,7 @@ struct ExecutionResult {
     std::string error_message;
     std::vector<std::string> column_names;
     std::vector<table::Row> rows;
+    std::size_t affected_rows = 0;
 };
 
 class Executor {
@@ -23,6 +25,7 @@ public:
     ExecutionResult execute(const sql::Statement& statement);
     ExecutionResult execute_select(const sql::SelectStatement& select_statement);
     ExecutionResult execute_insert(const sql::InsertStatement& insert_statement);
+    ExecutionResult execute_update(const sql::UpdateStatement& update_statement);
 
 private:
     catalog::Catalog& catalog_;

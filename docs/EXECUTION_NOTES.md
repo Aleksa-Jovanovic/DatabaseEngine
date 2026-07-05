@@ -34,6 +34,7 @@ The current `ExecutionResult` contains:
 - error message
 - result column names
 - result rows
+- affected row count for write statements
 
 ## Current SELECT behavior
 The current executor supports scan-based `SELECT`.
@@ -100,12 +101,32 @@ The current table auto-increment counter is live runtime state. It is rebuilt
 by scanning existing rows when a table object opens, and it advances during
 successful inserts. The counter is not persisted in catalog metadata yet.
 
+## Current UPDATE behavior
+The current executor supports table-level `UPDATE` execution through scan-based
+row matching.
+
+Supported forms:
+- update rows matched by `WHERE`
+- update all rows when `WHERE` is omitted
+- update one or more non-primary-key columns
+- return the number of affected rows in `ExecutionResult::affected_rows`
+
+The executor applies assignments to scanned rows and then calls
+`Table::update_by_key(...)` for each matching row.
+
+Current limitation:
+- updating the primary key is rejected
+
+Changing a primary key requires coordinated primary-index maintenance. That is
+deferred until the B+ tree delete/index-maintenance path exists.
+
 ## Current limitations
-- `UPDATE`, `DELETE`, and `CREATE TABLE` execution are not wired yet
+- `DELETE` and `CREATE TABLE` execution are not wired yet
 - filtering is in-memory after `Table::scan()`
 - no secondary-index lookup during execution yet
 - auto-increment state is rebuilt from table rows on open instead of persisted
   as catalog/table metadata
+- primary-key-changing `UPDATE` is not supported yet
 - query result rows still use `table::Row`, so they carry `Row::key` even when
   the primary-key column is not projected
 - no planner or physical operator tree yet
@@ -134,9 +155,19 @@ The current executor insert test verifies:
 - invalid primary-key type failure
 - duplicate named-column failure
 
+The current executor update test verifies:
+- updating one row by primary-key predicate
+- updating one row by non-primary predicate
+- updating all rows when `WHERE` is omitted
+- zero affected rows when no rows match
+- primary-key-changing update failure
+- missing-table update failure
+- unknown assignment-column failure
+- invalid assignment type failure
+
 ## Next steps
 Good next execution milestones:
 - introduce a query-result row type that is separate from storage/table rows
 - add basic planner structure
 - add index-scan execution for primary-key predicates
-- execute `UPDATE` and `DELETE`
+- execute `DELETE`

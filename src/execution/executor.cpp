@@ -594,6 +594,66 @@ std::optional<table::Row> build_row_from_insert(
     return row;
 }
 
+// UPDATE STATEMENT
+
+bool assignment_targets_primary_key(
+    const catalog::TableDefinition& table_definition,
+    const sql::AssignmentExpression& assignment
+) {
+    const auto primary_key_index = find_primary_key_index(table_definition);
+    if (!primary_key_index.has_value()) {
+        return false;
+    }
+
+    const auto column_index =
+        find_column_index(table_definition, assignment.column_name);
+
+    if (!column_index.has_value()) {
+        return false;
+    }
+
+    return column_index.value() == primary_key_index.value();
+}
+
+bool update_changes_primary_key(
+    const catalog::TableDefinition& table_definition,
+    const sql::UpdateStatement& update_statement
+) {
+    for (const sql::AssignmentExpression& assignment : update_statement.assignments) {
+        if (assignment_targets_primary_key(table_definition, assignment)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+std::optional<table::Row> apply_assignments_to_row(
+    const catalog::TableDefinition& table_definition,
+    const table::Row& row,
+    const std::vector<sql::AssignmentExpression>& assignments
+) {
+    table::Row updated_row = row;
+
+    for (const sql::AssignmentExpression& assignment : assignments) {
+        const auto column_index =
+            find_column_index(table_definition, assignment.column_name);
+
+        if (!column_index.has_value()) {
+            return std::nullopt;
+        }
+
+        if (column_index.value() >= updated_row.values.size()) {
+            return std::nullopt;
+        }
+
+        updated_row.values[column_index.value()] =
+            value_node_to_field_value(assignment.value);
+    }
+
+    return updated_row;
+}
+
 } // namespace
 
 Executor::Executor(catalog::Catalog& catalog)
@@ -608,11 +668,16 @@ ExecutionResult Executor::execute(const sql::Statement& statement) {
         return execute_insert(std::get<sql::InsertStatement>(statement));
     }
 
+    if (std::holds_alternative<sql::UpdateStatement>(statement)) {
+        return execute_update(std::get<sql::UpdateStatement>(statement));
+    }
+
     return ExecutionResult{
         false,
         "Statement execution is not supported yet",
         {},
-        {}
+        {},
+        0
     };
 }
 
@@ -625,7 +690,8 @@ ExecutionResult Executor::execute_select(const sql::SelectStatement& select_stat
             false,
             "Table does not exist: " + select_statement.table_name,
             {},
-            {}
+            {},
+            0
         };
     }
 
@@ -636,7 +702,8 @@ ExecutionResult Executor::execute_select(const sql::SelectStatement& select_stat
             false,
             "Unknown column in SELECT projection",
             {},
-            {}
+            {},
+            0
         };
     }
 
@@ -646,7 +713,8 @@ ExecutionResult Executor::execute_select(const sql::SelectStatement& select_stat
             false,
             "Could not open table: " + select_statement.table_name,
             {},
-            {}
+            {},
+            0
         };
     }
 
@@ -661,7 +729,8 @@ ExecutionResult Executor::execute_select(const sql::SelectStatement& select_stat
         true,
         "",
         column_names_for_indexes(table_definition.value(), projection_indexes.value()),
-        project_rows(rows, projection_indexes.value())
+        project_rows(rows, projection_indexes.value()),
+        0
     };
 }
 
@@ -676,7 +745,8 @@ ExecutionResult Executor::execute_insert(
             false,
             "Table does not exist: " + insert_statement.table_name,
             {},
-            {}
+            {},
+            0
         };
     }
 
@@ -686,7 +756,8 @@ ExecutionResult Executor::execute_insert(
             false,
             "Could not open table: " + insert_statement.table_name,
             {},
-            {}
+            {},
+            0
         };
     }
 
@@ -707,7 +778,8 @@ ExecutionResult Executor::execute_insert(
             false,
             "Could not build row from INSERT statement",
             {},
-            {}
+            {},
+            0
         };
     }
 
@@ -717,7 +789,8 @@ ExecutionResult Executor::execute_insert(
             false,
             "INSERT failed",
             {},
-            {}
+            {},
+            0
         };
     }
 
@@ -725,7 +798,113 @@ ExecutionResult Executor::execute_insert(
         true,
         "",
         {},
-        {}
+        {},
+        1
+    };
+}
+
+ExecutionResult Executor::execute_update(
+    const sql::UpdateStatement& update_statement
+) {
+    const auto table_definition =
+        catalog_.find_table_definition(update_statement.table_name);
+
+    if (!table_definition.has_value()) {
+        return ExecutionResult{
+            false,
+            "Table does not exist: " + update_statement.table_name,
+            {},
+            {},
+            0
+        };
+    }
+
+    if (update_statement.assignments.empty()) {
+        return ExecutionResult{
+            false,
+            "UPDATE must contain at least one assignment",
+            {},
+            {},
+            0
+        };
+    }
+
+    if (update_changes_primary_key(table_definition.value(), update_statement)) {
+        return ExecutionResult{
+            false,
+            "Updating primary key is not supported yet",
+            {},
+            {},
+            0
+        };
+    }
+
+    auto table = catalog_.open_table(update_statement.table_name);
+    if (table == nullptr) {
+        return ExecutionResult{
+            false,
+            "Could not open table: " + update_statement.table_name,
+            {},
+            {},
+            0
+        };
+    }
+
+    const std::vector<table::Row> rows = table->scan();
+
+    std::size_t updated_count = 0;
+
+    for (const table::Row& row : rows) {
+        bool should_update_row = true;
+
+        if (update_statement.where_expression.has_value()) {
+            should_update_row = evaluate_where_expression(
+                table_definition.value(),
+                row,
+                update_statement.where_expression.value()
+            );
+        }
+
+        if (!should_update_row) {
+            continue;
+        }
+
+        const auto updated_row =
+            apply_assignments_to_row(
+                table_definition.value(),
+                row,
+                update_statement.assignments
+            );
+
+        if (!updated_row.has_value()) {
+            return ExecutionResult{
+                false,
+                "Could not apply UPDATE assignment",
+                {},
+                {},
+                updated_count
+            };
+        }
+
+        if (!table->update_by_key(row.key, updated_row.value())) {
+            return ExecutionResult{
+                false,
+                "UPDATE failed",
+                {},
+                {},
+                updated_count
+            };
+        }
+
+        ++updated_count;
+    }
+
+    return ExecutionResult{
+        true,
+        "",
+        {},
+        {},
+        updated_count
     };
 }
 
