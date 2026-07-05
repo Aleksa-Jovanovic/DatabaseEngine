@@ -672,6 +672,10 @@ ExecutionResult Executor::execute(const sql::Statement& statement) {
         return execute_update(std::get<sql::UpdateStatement>(statement));
     }
 
+    if (std::holds_alternative<sql::DeleteStatement>(statement)) {
+        return execute_delete(std::get<sql::DeleteStatement>(statement));
+    }
+
     return ExecutionResult{
         false,
         "Statement execution is not supported yet",
@@ -905,6 +909,74 @@ ExecutionResult Executor::execute_update(
         {},
         {},
         updated_count
+    };
+}
+
+ExecutionResult Executor::execute_delete(
+    const sql::DeleteStatement& delete_statement
+) {
+    const auto table_definition =
+        catalog_.find_table_definition(delete_statement.table_name);
+
+    if (!table_definition.has_value()) {
+        return ExecutionResult{
+            false,
+            "Table does not exist: " + delete_statement.table_name,
+            {},
+            {},
+            0
+        };
+    }
+
+    auto table = catalog_.open_table(delete_statement.table_name);
+    if (table == nullptr) {
+        return ExecutionResult{
+            false,
+            "Could not open table: " + delete_statement.table_name,
+            {},
+            {},
+            0
+        };
+    }
+
+    const std::vector<table::Row> rows = table->scan();
+
+    std::size_t deleted_count = 0;
+
+    for (const table::Row& row : rows) {
+        bool should_delete_row = true;
+
+        if (delete_statement.where_expression.has_value()) {
+            should_delete_row = evaluate_where_expression(
+                table_definition.value(),
+                row,
+                delete_statement.where_expression.value()
+            );
+        }
+
+        if (!should_delete_row) {
+            continue;
+        }
+
+        if (!table->delete_by_key(row.key)) {
+            return ExecutionResult{
+                false,
+                "DELETE failed",
+                {},
+                {},
+                deleted_count
+            };
+        }
+
+        ++deleted_count;
+    }
+
+    return ExecutionResult{
+        true,
+        "",
+        {},
+        {},
+        deleted_count
     };
 }
 

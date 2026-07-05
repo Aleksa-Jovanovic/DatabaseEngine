@@ -26,6 +26,7 @@ public:
     ExecutionResult execute_select(const sql::SelectStatement& select_statement);
     ExecutionResult execute_insert(const sql::InsertStatement& insert_statement);
     ExecutionResult execute_update(const sql::UpdateStatement& update_statement);
+    ExecutionResult execute_delete(const sql::DeleteStatement& delete_statement);
 
 private:
     catalog::Catalog& catalog_;

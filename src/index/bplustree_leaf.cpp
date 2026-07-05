@@ -80,6 +80,23 @@ bool BPlusTreeLeafPage::insert_entry(std::uint32_t key, const RowId& row_id) {
     return true;
 }
 
+bool BPlusTreeLeafPage::delete_entry(std::uint32_t key) {
+    const std::int32_t key_index = find_key_index(key);
+    if (key_index < 0) {
+        return false;
+    }
+
+    BPlusTreeLeafEntry* leaf_entries = entries();
+    const std::uint16_t delete_index = static_cast<std::uint16_t>(key_index);
+
+    for (std::uint16_t i = delete_index; i + 1 < key_count(); ++i) {
+        leaf_entries[i] = leaf_entries[i + 1];
+    }
+
+    --fetch_header()->key_count;
+    return true;
+}
+
 BPlusTreeLeafEntry* BPlusTreeLeafPage::entry_at(std::uint16_t index) {
     if (index >= key_count()) {
         return nullptr;

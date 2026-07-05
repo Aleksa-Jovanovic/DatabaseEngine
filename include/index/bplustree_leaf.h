@@ -31,6 +31,7 @@ public:
 
     const BPlusTreeLeafEntry* find_entry(std::uint32_t key) const;
     bool insert_entry(std::uint32_t key, const RowId& row_id);
+    bool delete_entry(std::uint32_t key);
 
     BPlusTreeLeafEntry* entry_at(std::uint16_t index);
     const BPlusTreeLeafEntry* entry_at(std::uint16_t index) const;

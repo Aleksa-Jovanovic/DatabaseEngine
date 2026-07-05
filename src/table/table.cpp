@@ -143,11 +143,27 @@ bool Table::update_by_key(std::uint32_t key, const Row& updated_row) {
     return true;
 }
 
+// If heap delete succeeds and index delete fails, we currently cannot roll back the heap delete.
+// In this version, that would leave inconsistent state.
+// To reduce risk, delete from index first, then heap.
+// This has the opposite risk: if index delete succeeds and heap delete fails,
+// the row becomes unreachable by index but may still appear in full heap scan.
 bool Table::delete_by_key(std::uint32_t key) {
-    // Delete flow will be implemented later once table-level index maintenance
-    // and B+ tree delete behavior are available.
-    (void)key;
-    return false;
+    const auto row_id = primary_index_.search(key);
+    if (!row_id.has_value()) {
+        return false;
+    }
+
+    const auto deleted_index_entry = primary_index_.delete_key(key);
+    if (!deleted_index_entry.has_value()) {
+        return false;
+    }
+
+    if (!heap_file_.delete_record(row_id.value())) {
+        return false;
+    }
+
+    return true;
 }
 
 std::uint32_t Table::allocate_primary_key() {

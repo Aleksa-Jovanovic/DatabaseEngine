@@ -158,8 +158,8 @@ parser-provided SQL precedence. It also supports `INSERT` execution with
 schema-order values, named columns, simple defaults for omitted non-primary
 columns, and live auto-increment for omitted primary keys. Execution is still
 scan-based, now supports `UPDATE` for non-primary-key assignments with
-affected-row counts, and currently does not execute `DELETE`, `CREATE TABLE`,
-or index scans.
+affected-row counts, and now supports scan-based `DELETE` with affected-row
+counts. `CREATE TABLE` execution and index scans are still pending.
 
 ## Phase 10 - Transactions and recovery
 - transactions

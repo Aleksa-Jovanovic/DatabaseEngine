@@ -365,10 +365,29 @@ Current simplifications:
 - fixed-size `uint32_t` keys
 - duplicate-key rejection
 - page `0` is dedicated to index metadata in the current file format
-- no delete path yet
+- delete removes entries from leaf pages but does not rebalance the tree yet
 - no concurrency control
 - no WAL or recovery interaction
 - no range-scan API yet, although leaf pages are already linked for it
+
+## Current delete boundary
+The current B+ tree has a first point-delete path for primary-key index usage.
+
+Current behavior:
+- find the target leaf for the key
+- return the deleted `RowId` when the key exists
+- remove the key from the leaf entry array
+- mark the leaf page dirty when deletion succeeds
+
+Current simplifications:
+- no merge or redistribution after underflow
+- no root shrinking after deletes
+- no parent-separator cleanup after leaf contents change
+- empty or sparse leaf pages can remain in the tree
+
+This is enough for the current table/executor delete path because point lookup
+for the deleted key stops finding that entry. Full B+ tree delete balancing is
+left for a later index-maintenance pass.
 
 ## Current node sizing
 The current tree no longer hard-codes a tiny test-only node capacity.
@@ -408,3 +427,6 @@ The current index page tests verify:
 - recursive internal split propagation through a full internal root
 - successful search after the tree grows taller through an internal-root split
 - reopened-tree lookup using the persisted root page id
+- leaf-level B+ tree delete
+- delete of keys from a split tree without breaking neighboring lookups
+- reopened-tree lookup after deleted keys were removed

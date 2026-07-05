@@ -117,11 +117,29 @@ The executor applies assignments to scanned rows and then calls
 Current limitation:
 - updating the primary key is rejected
 
-Changing a primary key requires coordinated primary-index maintenance. That is
-deferred until the B+ tree delete/index-maintenance path exists.
+Changing a primary key requires coordinated primary-index maintenance and extra
+duplicate-key handling. That is intentionally deferred even though the first
+B+ tree delete path now exists.
+
+## Current DELETE behavior
+The current executor supports table-level `DELETE` execution through scan-based
+row matching.
+
+Supported forms:
+- delete rows matched by `WHERE`
+- delete all rows when `WHERE` is omitted
+- return the number of affected rows in `ExecutionResult::affected_rows`
+
+The executor scans the table, evaluates the optional `WHERE` expression against
+each full row, and calls `Table::delete_by_key(...)` for every matching row.
+
+Current limitation:
+- delete execution is scan-based and does not use index scans yet
+- table-level delete currently maintains the primary index only
+- the B+ tree delete path removes leaf entries but does not rebalance yet
 
 ## Current limitations
-- `DELETE` and `CREATE TABLE` execution are not wired yet
+- `CREATE TABLE` execution is not wired yet
 - filtering is in-memory after `Table::scan()`
 - no secondary-index lookup during execution yet
 - auto-increment state is rebuilt from table rows on open instead of persisted
@@ -165,9 +183,16 @@ The current executor update test verifies:
 - unknown assignment-column failure
 - invalid assignment type failure
 
+The current executor delete test verifies:
+- deleting one row by primary-key predicate
+- deleting rows by non-primary predicate
+- deleting all rows when `WHERE` is omitted
+- zero affected rows when no rows match
+- missing-table delete failure
+
 ## Next steps
 Good next execution milestones:
 - introduce a query-result row type that is separate from storage/table rows
 - add basic planner structure
 - add index-scan execution for primary-key predicates
-- execute `DELETE`
+- execute `CREATE TABLE`

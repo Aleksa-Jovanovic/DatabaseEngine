@@ -223,6 +223,36 @@ std::optional<RowId> BPlusTree::update(std::uint32_t key, const RowId& row_id) {
     return std::nullopt;
 }
 
+std::optional<RowId> BPlusTree::delete_key(std::uint32_t key) {
+    const auto leaf_page_id = find_leaf_page_id(key);
+    if (!leaf_page_id.has_value()) {
+        return std::nullopt;
+    }
+
+    Page* leaf_page_ptr = page_cache_manager_.fetch_page(leaf_page_id.value());
+    if (leaf_page_ptr == nullptr) {
+        return std::nullopt;
+    }
+
+    BPlusTreeLeafPage leaf_page(*leaf_page_ptr);
+
+    const BPlusTreeLeafEntry* existing_entry = leaf_page.find_entry(key);
+    if (existing_entry == nullptr) {
+        page_cache_manager_.unpin_page(leaf_page_id.value(), false);
+        return std::nullopt;
+    }
+
+    const RowId deleted_row_id = existing_entry->row_id;
+
+    if (!leaf_page.delete_entry(key)) {
+        page_cache_manager_.unpin_page(leaf_page_id.value(), false);
+        return std::nullopt;
+    }
+
+    page_cache_manager_.unpin_page(leaf_page_id.value(), true);
+    return deleted_row_id;
+}
+
 std::optional<RowId> BPlusTree::create_initial_tree(std::uint32_t key, const RowId& row_id) {
     Page* root_page = page_cache_manager_.new_page();
     if (root_page == nullptr) {

@@ -129,19 +129,31 @@ int main() {
         // Changing the primary key is out of scope for the first update path.
         auto invalid_key_change = table.update_by_key(20, make_user_row(21, "Wrong key", true));
         assert(!invalid_key_change);
+
+        assert(table.delete_by_key(10));
+        assert(!table.get_by_key(10).has_value());
+        assert(!table.delete_by_key(10));
+        assert(!table.delete_by_key(999));
+
+        scanned_rows = table.scan();
+        assert(scanned_rows.size() == 2);
+        assert_user_row(require_row_by_key(scanned_rows, 20), 20,
+            "this is a much longer string that should be more likely to move",
+            false
+        );
+        assert_user_row(require_row_by_key(scanned_rows, 30), 30, "Carol", true);
     }
 
     // Reopen the table to verify that both heap data and index root metadata persist.
     {
         db::table::Table reopened_table("users", heap_file_name, index_file_name, 8);
 
-        auto found_10 = reopened_table.get_by_key(10);
         auto found_20 = reopened_table.get_by_key(20);
         auto found_30 = reopened_table.get_by_key(30);
+        auto deleted_10 = reopened_table.get_by_key(10);
         auto missing = reopened_table.get_by_key(999);
 
-        assert(found_10.has_value());
-        assert_user_row(found_10.value(), 10, "Alice", true);
+        assert(!deleted_10.has_value());
 
         assert(found_20.has_value());
         assert_user_row(
@@ -157,8 +169,7 @@ int main() {
         assert(!missing.has_value());
 
         auto scanned_rows = reopened_table.scan();
-        assert(scanned_rows.size() == 3);
-        assert_user_row(require_row_by_key(scanned_rows, 10), 10, "Alice", true);
+        assert(scanned_rows.size() == 2);
         assert_user_row(require_row_by_key(scanned_rows, 20), 20,
             "this is a much longer string that should be more likely to move",
             false

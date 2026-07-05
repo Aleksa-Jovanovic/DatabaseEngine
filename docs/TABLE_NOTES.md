@@ -158,15 +158,23 @@ This keeps the first update path simple because changing the indexed key would
 require coordinated index maintenance that is intentionally deferred.
 
 ## Current delete behavior
-The current table API exposes a delete method shape, but full table-level
-delete behavior is not implemented yet.
+The current table API supports primary-key-based delete through
+`Table::delete_by_key(...)`.
 
-The main reason is that:
-- heap-file delete exists
-- B+ tree delete does not yet exist
+Current behavior:
+- resolve the key through the primary B+ tree
+- delete the key from the primary index
+- delete the matching heap record
+- return `false` when the key does not exist
 
-So a correct table-level delete path should wait until index delete behavior is
-available or until a deliberate temporary strategy is chosen.
+Current limitation:
+- secondary indexes are not maintained yet
+- there is no rollback if primary-index delete succeeds and heap delete fails
+
+The current delete order prefers avoiding duplicate stale index entries, but a
+crash or heap-delete failure between index delete and heap delete could leave a
+row visible to heap scan but unreachable by primary-key lookup. WAL/recovery and
+transactional rollback are intentionally deferred.
 
 ## Current support for additional indexes
 The current `Table` class now has a first explicit registration path for
@@ -203,6 +211,7 @@ The current table integration test verifies:
 - same-key update behavior
 - index repair when a variable-length update moves the row to a new physical location
 - rejection of primary-key-changing updates
+- primary-key delete behavior through index lookup plus heap delete
 - schema-backed row validation for field count, field type, and primary-key value
 - persistence across reopen through heap and primary index files
 
@@ -234,7 +243,8 @@ into separate configuration fields.
 - primary key is still stored separately from the logical field vector
 - auto-increment state is rebuilt from table rows on open instead of persisted
 - no secondary-index backfill or maintenance yet
-- no delete path yet
+- delete does not rebalance the B+ tree yet
+- delete is not transactional or rollback-safe yet
 
 ## Phase 6 checkpoint
 For the current project scope, Phase 6 now has:
@@ -244,6 +254,7 @@ For the current project scope, Phase 6 now has:
 - primary-index-backed insert and lookup
 - full table scan support for the first execution layer
 - same-key update behavior with index repair on row relocation
+- primary-key delete behavior
 - first secondary-index metadata and registration scaffolding
 
 That is a good stopping point before moving into catalog/schema persistence in
