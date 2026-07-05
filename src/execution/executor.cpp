@@ -8,6 +8,8 @@
 namespace db::execution {
 namespace {
 
+// SELECT STATEMENT
+
 std::optional<std::size_t> find_column_index(
     const catalog::TableDefinition& table_definition,
     const std::string& column_name
@@ -365,6 +367,233 @@ std::vector<table::Row> filter_rows(
     return filtered_rows;
 }
 
+// INSERT STATEMENT
+
+table::FieldValue value_node_to_field_value(const sql::ValueNode& value) {
+    if (std::holds_alternative<sql::IntegerLiteral>(value)) {
+        return std::get<sql::IntegerLiteral>(value).value;
+    }
+
+    if (std::holds_alternative<sql::StringLiteral>(value)) {
+        return std::get<sql::StringLiteral>(value).value;
+    }
+
+    if (std::holds_alternative<sql::BooleanLiteral>(value)) {
+        return std::get<sql::BooleanLiteral>(value).value;
+    }
+
+    if (std::holds_alternative<sql::DateLiteral>(value)) {
+        return table::DateValue{std::get<sql::DateLiteral>(value).value};
+    }
+
+    return std::int64_t{0};
+}
+
+std::optional<std::size_t> find_primary_key_index(
+    const catalog::TableDefinition& table_definition
+) {
+    const auto& columns = table_definition.schema.columns();
+
+    for (std::size_t i = 0; i < columns.size(); ++i) {
+        if (columns[i].is_primary_key) {
+            return i;
+        }
+    }
+
+    return std::nullopt;
+}
+
+table::FieldValue default_value_for_column(
+    const catalog::ColumnDefinition& column
+) {
+    switch (column.type) {
+        case catalog::ColumnType::Integer:
+            return std::int64_t{0};
+
+        case catalog::ColumnType::String:
+            return std::string{};
+
+        case catalog::ColumnType::Boolean:
+            return false;
+
+        case catalog::ColumnType::Date:
+            return table::DateValue{""};
+    }
+
+    return std::int64_t{0};
+}
+
+std::vector<table::FieldValue> default_values_for_schema(
+    const catalog::TableDefinition& table_definition
+) {
+    std::vector<table::FieldValue> values;
+
+    for (const auto& column : table_definition.schema.columns()) {
+        values.push_back(default_value_for_column(column));
+    }
+
+    return values;
+}
+
+bool insert_provides_primary_key(
+    const catalog::TableDefinition& table_definition,
+    const sql::InsertStatement& insert_statement
+) {
+    const auto primary_key_index = find_primary_key_index(table_definition);
+    if (!primary_key_index.has_value()) {
+        return false;
+    }
+
+    if (insert_statement.column_names.empty()) {
+        return insert_statement.values.size() == table_definition.schema.columns().size();
+    }
+
+    for (const std::string& column_name : insert_statement.column_names) {
+        const auto column_index = find_column_index(table_definition, column_name);
+        if (!column_index.has_value()) {
+            return false;
+        }
+
+        if (column_index.value() == primary_key_index.value()) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+struct InsertValuesResult {
+    std::vector<table::FieldValue> values;
+    bool primary_key_was_provided = false;
+};
+
+std::optional<InsertValuesResult> build_schema_ordered_values(
+    const catalog::TableDefinition& table_definition,
+    const sql::InsertStatement& insert_statement
+) {
+    const auto& columns = table_definition.schema.columns();
+
+    InsertValuesResult result;
+    result.values = default_values_for_schema(table_definition);
+
+    if (insert_statement.column_names.empty()) {
+        const auto primary_key_index = find_primary_key_index(table_definition);
+        if (!primary_key_index.has_value()) {
+            return std::nullopt;
+        }
+
+        if (insert_statement.values.size() == columns.size()) {
+            result.primary_key_was_provided = true;
+
+            for (std::size_t i = 0; i < insert_statement.values.size(); ++i) {
+                result.values[i] = value_node_to_field_value(insert_statement.values[i]);
+            }
+
+            return result;
+        }
+
+        if (insert_statement.values.size() == columns.size() - 1) {
+            result.primary_key_was_provided = false;
+
+            std::size_t source_index = 0;
+
+            for (std::size_t column_index = 0; column_index < columns.size(); ++column_index) {
+                if (column_index == primary_key_index.value()) {
+                    continue;
+                }
+
+                result.values[column_index] =
+                    value_node_to_field_value(insert_statement.values[source_index]);
+
+                ++source_index;
+            }
+
+            return result;
+        }
+
+        return std::nullopt;
+    }
+
+    if (insert_statement.column_names.size() != insert_statement.values.size()) {
+        return std::nullopt;
+    }
+
+    std::vector<bool> assigned(columns.size(), false);
+
+    for (std::size_t i = 0; i < insert_statement.column_names.size(); ++i) {
+        const auto column_index =
+            find_column_index(table_definition, insert_statement.column_names[i]);
+
+        if (!column_index.has_value()) {
+            return std::nullopt;
+        }
+
+        if (assigned[column_index.value()]) {
+            return std::nullopt;
+        }
+
+        result.values[column_index.value()] =
+            value_node_to_field_value(insert_statement.values[i]);
+
+        assigned[column_index.value()] = true;
+    }
+
+    const auto primary_key_index = find_primary_key_index(table_definition);
+    if (!primary_key_index.has_value()) {
+        return std::nullopt;
+    }
+
+    result.primary_key_was_provided = assigned[primary_key_index.value()];
+    return result;
+}
+
+std::optional<table::Row> build_row_from_insert(
+    const catalog::TableDefinition& table_definition,
+    const sql::InsertStatement& insert_statement,
+    std::optional<std::uint32_t> generated_primary_key
+) {
+    const auto insert_values =
+        build_schema_ordered_values(table_definition, insert_statement);
+
+    if (!insert_values.has_value()) {
+        return std::nullopt;
+    }
+
+    const auto primary_key_index = find_primary_key_index(table_definition);
+    if (!primary_key_index.has_value()) {
+        return std::nullopt;
+    }
+
+    std::vector<table::FieldValue> values = insert_values->values;
+
+    if (!insert_values->primary_key_was_provided) {
+        if (!generated_primary_key.has_value()) {
+            return std::nullopt;
+        }
+
+        values[primary_key_index.value()] =
+            std::int64_t{generated_primary_key.value()};
+    }
+
+    const table::FieldValue& primary_key_value =
+        values[primary_key_index.value()];
+
+    if (!std::holds_alternative<std::int64_t>(primary_key_value)) {
+        return std::nullopt;
+    }
+
+    const std::int64_t key = std::get<std::int64_t>(primary_key_value);
+    if (key < 0) {
+        return std::nullopt;
+    }
+
+    table::Row row;
+    row.key = static_cast<std::uint32_t>(key);
+    row.values = std::move(values);
+
+    return row;
+}
+
 } // namespace
 
 Executor::Executor(catalog::Catalog& catalog)
@@ -373,6 +602,10 @@ Executor::Executor(catalog::Catalog& catalog)
 ExecutionResult Executor::execute(const sql::Statement& statement) {
     if (std::holds_alternative<sql::SelectStatement>(statement)) {
         return execute_select(std::get<sql::SelectStatement>(statement));
+    }
+
+    if (std::holds_alternative<sql::InsertStatement>(statement)) {
+        return execute_insert(std::get<sql::InsertStatement>(statement));
     }
 
     return ExecutionResult{
@@ -384,7 +617,9 @@ ExecutionResult Executor::execute(const sql::Statement& statement) {
 }
 
 ExecutionResult Executor::execute_select(const sql::SelectStatement& select_statement) {
-    const auto table_definition = catalog_.find_table_definition(select_statement.table_name);
+    const auto table_definition = 
+        catalog_.find_table_definition(select_statement.table_name);
+    
     if (!table_definition.has_value()) {
         return ExecutionResult{
             false,
@@ -427,6 +662,70 @@ ExecutionResult Executor::execute_select(const sql::SelectStatement& select_stat
         "",
         column_names_for_indexes(table_definition.value(), projection_indexes.value()),
         project_rows(rows, projection_indexes.value())
+    };
+}
+
+ExecutionResult Executor::execute_insert(
+    const sql::InsertStatement& insert_statement
+) {
+    const auto table_definition =
+        catalog_.find_table_definition(insert_statement.table_name);
+
+    if (!table_definition.has_value()) {
+        return ExecutionResult{
+            false,
+            "Table does not exist: " + insert_statement.table_name,
+            {},
+            {}
+        };
+    }
+
+    auto table = catalog_.open_table(insert_statement.table_name);
+    if (table == nullptr) {
+        return ExecutionResult{
+            false,
+            "Could not open table: " + insert_statement.table_name,
+            {},
+            {}
+        };
+    }
+
+    std::optional<std::uint32_t> generated_primary_key = std::nullopt;
+    if (!insert_provides_primary_key(table_definition.value(), insert_statement)) {
+        generated_primary_key = table->allocate_primary_key();
+    }
+
+    const auto row =
+        build_row_from_insert(
+            table_definition.value(),
+            insert_statement,
+            generated_primary_key
+        );
+
+    if (!row.has_value()) {
+        return ExecutionResult{
+            false,
+            "Could not build row from INSERT statement",
+            {},
+            {}
+        };
+    }
+
+    const auto row_id = table->insert(row.value());
+    if (!row_id.has_value()) {
+        return ExecutionResult{
+            false,
+            "INSERT failed",
+            {},
+            {}
+        };
+    }
+
+    return ExecutionResult{
+        true,
+        "",
+        {},
+        {}
     };
 }
 

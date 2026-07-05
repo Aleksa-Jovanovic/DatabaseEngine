@@ -24,6 +24,7 @@ Table::Table(const TableMetadata& metadata)
       heap_file_(metadata.heap_file_name, metadata.cache_size),
       primary_index_(metadata.primary_index_file_name, metadata.cache_size) {
     load_secondary_indexes_from_metadata();
+    initialize_next_primary_key_value();
 }
 
 std::optional<RowId> Table::insert(const Row& row) {
@@ -48,6 +49,8 @@ std::optional<RowId> Table::insert(const Row& row) {
         heap_file_.delete_record(row_id.value());
         return std::nullopt;
     }
+
+    advance_next_primary_key_value(row.key);
 
     return row_id;
 }
@@ -145,6 +148,12 @@ bool Table::delete_by_key(std::uint32_t key) {
     // and B+ tree delete behavior are available.
     (void)key;
     return false;
+}
+
+std::uint32_t Table::allocate_primary_key() {
+    const std::uint32_t key = next_primary_key_value_;
+    ++next_primary_key_value_;
+    return key;
 }
 
 bool Table::add_secondary_index(
@@ -276,6 +285,23 @@ bool Table::validate_row(const Row& row) const {
     }
 
     return true;
+}
+
+void Table::advance_next_primary_key_value(std::uint32_t key) {
+    if (key >= next_primary_key_value_) {
+        next_primary_key_value_ = key + 1;
+    }
+}
+
+// Heap scan order is physical insertion/storage order, not primary-key order,
+// so rebuild the live auto-increment counter from the maximum existing key.
+void Table::initialize_next_primary_key_value() {
+    next_primary_key_value_ = 1;
+
+    const std::vector<Row> rows = scan();
+    for (const Row& row : rows) {
+        advance_next_primary_key_value(row.key);
+    }
 }
 
 }  // namespace db::table

@@ -123,6 +123,23 @@ Direct table construction without column metadata remains supported for older
 tests and lower-level usage. In that mode, row validation is intentionally
 skipped.
 
+## Current primary-key allocation behavior
+The table layer now keeps a live `next_primary_key_value_` counter for
+auto-increment-style inserts.
+
+When a `Table` object opens, it scans existing rows once and initializes the
+counter from the maximum existing primary key. Heap scan order is physical
+storage order, not primary-key order, so the table must inspect all scanned
+rows to find the maximum key.
+
+Successful inserts advance the live counter when needed. This keeps manual
+high-key inserts and later generated keys aligned.
+
+Current limitation:
+- the auto-increment counter is live runtime state only
+- it is rebuilt from table rows when the table opens
+- it is not persisted in catalog or table metadata yet
+
 ## Current update behavior
 The current table layer has a first `update_by_key(...)` implementation.
 
@@ -215,9 +232,9 @@ into separate configuration fields.
 - current heap bridge still reuses `VarRecord`
 - row values are schema-validated only when `TableMetadata` contains columns
 - primary key is still stored separately from the logical field vector
+- auto-increment state is rebuilt from table rows on open instead of persisted
 - no secondary-index backfill or maintenance yet
 - no delete path yet
-- no rollback if heap insert succeeds and index insert fails
 
 ## Phase 6 checkpoint
 For the current project scope, Phase 6 now has:

@@ -31,6 +31,8 @@ public:
     bool update_by_key(std::uint32_t key, const Row& updated_row);
     bool delete_by_key(std::uint32_t key);
 
+    std::uint32_t allocate_primary_key();
+
     bool add_secondary_index(
         const std::string& index_name,
         const std::string& column_name,
@@ -50,9 +52,12 @@ private:
     HeapFile heap_file_;
     index::BPlusTree primary_index_;
     std::unordered_map<std::string, SecondaryIndexInfo> secondary_indexes_;
+    std::uint32_t next_primary_key_value_ = 1;
 
     void load_secondary_indexes_from_metadata();
     bool validate_row(const Row& row) const;
+    void initialize_next_primary_key_value();
+    void advance_next_primary_key_value(std::uint32_t key);
 };
 
 }  // namespace db::table

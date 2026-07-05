@@ -75,11 +75,37 @@ Supported logical behavior:
 
 Current filtering is scan-based. No index scan is used yet.
 
+## Current INSERT behavior
+The current executor supports table-level `INSERT` execution.
+
+Supported forms:
+- schema-order inserts with all values
+- schema-order inserts that omit the primary key
+- named-column inserts
+- named-column inserts with reordered columns
+- named-column inserts that omit non-primary columns
+- named-column inserts that omit the primary key
+
+When values are omitted, the executor fills missing non-primary columns with
+simple type defaults:
+- integer columns default to `0`
+- string columns default to `""`
+- boolean columns default to `false`
+- date columns default to an empty `DateValue`
+
+When the primary key is omitted, the executor asks the opened `Table` for a
+generated primary key and writes that generated key into the row before insert.
+
+The current table auto-increment counter is live runtime state. It is rebuilt
+by scanning existing rows when a table object opens, and it advances during
+successful inserts. The counter is not persisted in catalog metadata yet.
+
 ## Current limitations
-- only `SELECT` execution is implemented
-- `INSERT`, `UPDATE`, `DELETE`, and `CREATE TABLE` execution are not wired yet
+- `UPDATE`, `DELETE`, and `CREATE TABLE` execution are not wired yet
 - filtering is in-memory after `Table::scan()`
 - no secondary-index lookup during execution yet
+- auto-increment state is rebuilt from table rows on open instead of persisted
+  as catalog/table metadata
 - query result rows still use `table::Row`, so they carry `Row::key` even when
   the primary-key column is not projected
 - no planner or physical operator tree yet
@@ -96,9 +122,20 @@ The current executor test verifies:
 - `OR`
 - logical precedence between `AND` and `OR`
 
+The current executor insert test verifies:
+- full schema-order inserts
+- named-column inserts
+- reordered named-column inserts
+- omitted non-primary columns with defaults
+- omitted primary key with live auto-increment
+- manual high primary keys advancing the next generated key
+- duplicate primary-key insert failure
+- missing-table insert failure
+- invalid primary-key type failure
+- duplicate named-column failure
+
 ## Next steps
 Good next execution milestones:
-- execute `INSERT`
 - introduce a query-result row type that is separate from storage/table rows
 - add basic planner structure
 - add index-scan execution for primary-key predicates

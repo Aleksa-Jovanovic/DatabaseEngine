@@ -22,6 +22,7 @@ public:
 
     ExecutionResult execute(const sql::Statement& statement);
     ExecutionResult execute_select(const sql::SelectStatement& select_statement);
+    ExecutionResult execute_insert(const sql::InsertStatement& insert_statement);
 
 private:
     catalog::Catalog& catalog_;
