@@ -148,6 +148,15 @@ lists, `SELECT` parsing supports `*` and explicit projected columns, and
 Goal:
 Execute parsed queries.
 
+Current status:
+Phase 9 is in progress.
+The project now has a first execution layer with an `Executor` and
+`ExecutionResult`, wired through catalog table lookup and `Table::scan()`.
+The current executor supports scan-based `SELECT`, explicit projection,
+comparison filtering, `BETWEEN`, and logical `AND`/`OR` filtering with
+parser-provided SQL precedence. Execution is still scan-based and currently
+does not execute `INSERT`, `UPDATE`, `DELETE`, `CREATE TABLE`, or index scans.
+
 ## Phase 10 - Transactions and recovery
 - transactions
 - locking/latching basics

@@ -22,6 +22,7 @@ add_library(db_storage
     src/sql/tokenizer.cpp
     src/sql/parser.cpp
     src/sql/ast.cpp
+    src/execution/executor.cpp
 )
 
 target_include_directories(db_storage
@@ -74,3 +75,4 @@ add_db_test(RowSerializerTest tests/table/row_serializer_test.cpp)
 add_db_test(CatalogTest tests/catalog/catalog_test.cpp)
 add_db_test(TokenizerTest tests/sql/tokenizer_test.cpp)
 add_db_test(ParserTest tests/sql/parser_test.cpp)
+add_db_test(ExecutorTest tests/execution/executor_test.cpp)
