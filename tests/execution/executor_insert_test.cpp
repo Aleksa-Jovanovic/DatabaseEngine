@@ -48,7 +48,7 @@ int main() {
     std::filesystem::remove(primary_index_file_name);
 
     db::catalog::Schema user_schema;
-    user_schema.add_column({"id", db::catalog::ColumnType::Integer, true});
+    user_schema.add_column({"id", db::catalog::ColumnType::Integer, true, true});
     user_schema.add_column({"name", db::catalog::ColumnType::String, false});
     user_schema.add_column({"active", db::catalog::ColumnType::Boolean, false});
 
@@ -199,6 +199,57 @@ int main() {
 
         assert(!duplicate_column_insert_result.success);
         assert(!duplicate_column_insert_result.error_message.empty());
+    }
+
+    {
+        const std::string citizens_heap_file_name = "executor_insert_citizens_heap.db";
+        const std::string citizens_primary_index_file_name =
+            "executor_insert_citizens_primary_index.db";
+
+        std::filesystem::remove(citizens_heap_file_name);
+        std::filesystem::remove(citizens_primary_index_file_name);
+
+        db::catalog::Schema citizen_schema;
+        citizen_schema.add_column({"jmbg", db::catalog::ColumnType::Integer, true, false});
+        citizen_schema.add_column({"name", db::catalog::ColumnType::String, false, false});
+
+        db::catalog::TableDefinition citizens_table{
+            "citizens",
+            citizen_schema,
+            citizens_heap_file_name,
+            {
+                {
+                    "citizens_pkey",
+                    "citizens",
+                    "jmbg",
+                    citizens_primary_index_file_name,
+                    true,
+                    true
+                }
+            }
+        };
+
+        assert(catalog.create_table(citizens_table));
+
+        const db::sql::Statement missing_primary_key_statement =
+            parser.parse("INSERT INTO citizens (name) VALUES ('Manual Primary Key Required');");
+        const db::execution::ExecutionResult missing_primary_key_result =
+            executor.execute(missing_primary_key_statement);
+
+        assert(!missing_primary_key_result.success);
+        assert(!missing_primary_key_result.error_message.empty());
+
+        const db::sql::Statement manual_primary_key_statement =
+            parser.parse("INSERT INTO citizens VALUES (123456789, 'Aleksa');");
+        const db::execution::ExecutionResult manual_primary_key_result =
+            executor.execute(manual_primary_key_statement);
+
+        assert(manual_primary_key_result.success);
+        assert(manual_primary_key_result.error_message.empty());
+        assert(manual_primary_key_result.affected_rows == 1);
+
+        std::filesystem::remove(citizens_heap_file_name);
+        std::filesystem::remove(citizens_primary_index_file_name);
     }
 
     std::filesystem::remove(heap_file_name);

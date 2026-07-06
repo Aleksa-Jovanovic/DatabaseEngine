@@ -98,7 +98,8 @@ std::optional<table::TableMetadata> Catalog::build_table_metadata_from_definitio
         columns.push_back(table::ColumnMetadata{
             column.name,
             to_table_column_type(column.type),
-            column.is_primary_key
+            column.is_primary_key,
+            column.is_auto_increment
         });
     }
 
@@ -201,6 +202,14 @@ bool Catalog::validate_table_definition(const TableDefinition& table_definition)
 
             primary_key_column_name = column.name;
             primary_key_column_type = column.type;
+        }
+
+        if (column.is_auto_increment && !column.is_primary_key) {
+            return false;
+        }
+
+        if (column.is_auto_increment && column.type != ColumnType::Integer) {
+            return false;
         }
     }
 

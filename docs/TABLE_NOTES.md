@@ -30,6 +30,7 @@ Current column metadata fields:
 - column name
 - column type
 - whether the column is the primary key
+- whether the primary key should auto-increment when omitted by SQL execution
 
 Current secondary-index metadata fields:
 - index name
@@ -126,6 +127,10 @@ skipped.
 ## Current primary-key allocation behavior
 The table layer now keeps a live `next_primary_key_value_` counter for
 auto-increment-style inserts.
+
+`TableMetadata` can now mark a column as auto-increment, but the actual
+decision to generate a missing primary-key value currently happens in the
+execution layer before calling `Table::insert(...)`.
 
 When a `Table` object opens, it scans existing rows once and initializes the
 counter from the maximum existing primary key. Heap scan order is physical
@@ -241,7 +246,9 @@ into separate configuration fields.
 - current heap bridge still reuses `VarRecord`
 - row values are schema-validated only when `TableMetadata` contains columns
 - primary key is still stored separately from the logical field vector
-- auto-increment state is rebuilt from table rows on open instead of persisted
+- auto-increment metadata is persisted through catalog definitions
+- auto-increment counter state is rebuilt from table rows on open instead of
+  persisted as a stored sequence value
 - no secondary-index backfill or maintenance yet
 - delete does not rebalance the B+ tree yet
 - delete is not transactional or rollback-safe yet

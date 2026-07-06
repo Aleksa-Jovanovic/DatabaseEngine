@@ -435,6 +435,22 @@ std::vector<table::FieldValue> default_values_for_schema(
     return values;
 }
 
+bool primary_key_is_auto_increment(
+    const catalog::TableDefinition& table_definition
+) {
+    const auto primary_key_index = find_primary_key_index(table_definition);
+    if (!primary_key_index.has_value()) {
+        return false;
+    }
+
+    const auto& columns = table_definition.schema.columns();
+    if (primary_key_index.value() >= columns.size()) {
+        return false;
+    }
+
+    return columns[primary_key_index.value()].is_auto_increment;
+}
+
 bool insert_provides_primary_key(
     const catalog::TableDefinition& table_definition,
     const sql::InsertStatement& insert_statement
@@ -654,6 +670,80 @@ std::optional<table::Row> apply_assignments_to_row(
     return updated_row;
 }
 
+// CREATE TABLE STATEMENT
+
+catalog::ColumnType to_catalog_column_type(sql::SqlTypeName type) {
+    switch (type) {
+        case sql::SqlTypeName::Integer:
+            return catalog::ColumnType::Integer;
+        case sql::SqlTypeName::String:
+            return catalog::ColumnType::String;
+        case sql::SqlTypeName::Boolean:
+            return catalog::ColumnType::Boolean;
+        case sql::SqlTypeName::Date:
+            return catalog::ColumnType::Date;
+    }
+
+    return catalog::ColumnType::String;
+}
+
+std::string heap_file_name_for_table(const std::string& table_name) {
+    return table_name + "_heap.db";
+}
+
+std::string primary_index_file_name_for_table(const std::string& table_name) {
+    return table_name + "_primary_index.db";
+}
+
+std::string primary_index_name_for_table(const std::string& table_name) {
+    return table_name + "_pkey";
+}
+
+std::optional<sql::ColumnDefinitionNode> find_primary_key_column(
+    const sql::CreateTableStatement& create_table_statement
+) {
+    for (const sql::ColumnDefinitionNode& column : create_table_statement.columns) {
+        if (column.is_primary_key) {
+            return column;
+        }
+    }
+
+    return std::nullopt;
+}
+
+catalog::TableDefinition build_table_definition_from_create(
+    const sql::CreateTableStatement& create_table_statement
+) {
+    catalog::Schema schema;
+
+    for (const sql::ColumnDefinitionNode& column : create_table_statement.columns) {
+        schema.add_column(catalog::ColumnDefinition{
+            column.name,
+            to_catalog_column_type(column.type),
+            column.is_primary_key,
+            column.is_auto_increment
+        });
+    }
+
+    const auto primary_key_column = find_primary_key_column(create_table_statement);
+
+    return catalog::TableDefinition{
+        create_table_statement.table_name,
+        schema,
+        create_table_statement.table_name + "_heap.db",
+        {
+            catalog::IndexDefinition{
+                create_table_statement.table_name + "_pkey",
+                create_table_statement.table_name,
+                primary_key_column->name,
+                create_table_statement.table_name + "_primary_index.db",
+                true,
+                true
+            }
+        }
+    };
+}
+
 } // namespace
 
 Executor::Executor(catalog::Catalog& catalog)
@@ -674,6 +764,10 @@ ExecutionResult Executor::execute(const sql::Statement& statement) {
 
     if (std::holds_alternative<sql::DeleteStatement>(statement)) {
         return execute_delete(std::get<sql::DeleteStatement>(statement));
+    }
+
+    if (std::holds_alternative<sql::CreateTableStatement>(statement)) {
+        return execute_create_table(std::get<sql::CreateTableStatement>(statement));
     }
 
     return ExecutionResult{
@@ -765,8 +859,22 @@ ExecutionResult Executor::execute_insert(
         };
     }
 
+    const bool primary_key_was_provided =
+        insert_provides_primary_key(table_definition.value(), insert_statement);
+
     std::optional<std::uint32_t> generated_primary_key = std::nullopt;
-    if (!insert_provides_primary_key(table_definition.value(), insert_statement)) {
+
+    if (!primary_key_was_provided) {
+        if (!primary_key_is_auto_increment(table_definition.value())) {
+            return ExecutionResult{
+                false,
+                "INSERT must provide a PRIMARY KEY value",
+                {},
+                {},
+                0
+            };
+        }
+
         generated_primary_key = table->allocate_primary_key();
     }
 
@@ -978,6 +1086,46 @@ ExecutionResult Executor::execute_delete(
         {},
         deleted_count
     };
+}
+
+ExecutionResult Executor::execute_create_table(
+    const sql::CreateTableStatement& create_table_statement
+) {
+    if (create_table_statement.table_name.empty()) {
+        return ExecutionResult{false, "Table name cannot be empty", {}, {}, 0};
+    }
+
+    if (create_table_statement.columns.empty()) {
+        return ExecutionResult{false, "CREATE TABLE must define at least one column", {}, {}, 0};
+    }
+
+    const auto primary_key_column = find_primary_key_column(create_table_statement);
+    if (!primary_key_column.has_value()) {
+        return ExecutionResult{false, "CREATE TABLE must define a PRIMARY KEY column", {}, {}, 0};
+    }
+
+    if (primary_key_column->type != sql::SqlTypeName::Integer) {
+        return ExecutionResult{false, "PRIMARY KEY must be INTEGER", {}, {}, 0};
+    }
+
+    if (catalog_.has_table(create_table_statement.table_name)) {
+        return ExecutionResult{
+            false,
+            "Table already exists: " + create_table_statement.table_name,
+            {},
+            {},
+            0
+        };
+    }
+
+    const catalog::TableDefinition table_definition =
+        build_table_definition_from_create(create_table_statement);
+
+    if (!catalog_.create_table(table_definition)) {
+        return ExecutionResult{false, "CREATE TABLE failed validation", {}, {}, 0};
+    }
+
+    return ExecutionResult{true, "", {}, {}, 0};
 }
 
 }  // namespace db::execution

@@ -154,12 +154,13 @@ The project now has a first execution layer with an `Executor` and
 `ExecutionResult`, wired through catalog table lookup and `Table::scan()`.
 The current executor supports scan-based `SELECT`, explicit projection,
 comparison filtering, `BETWEEN`, and logical `AND`/`OR` filtering with
-parser-provided SQL precedence. It also supports `INSERT` execution with
+parser-provided SQL precedence. It also supports SQL-driven `CREATE TABLE`
+with `PRIMARY KEY` and `AUTOINCREMENT` column metadata, `INSERT` execution with
 schema-order values, named columns, simple defaults for omitted non-primary
-columns, and live auto-increment for omitted primary keys. Execution is still
-scan-based, now supports `UPDATE` for non-primary-key assignments with
-affected-row counts, and now supports scan-based `DELETE` with affected-row
-counts. `CREATE TABLE` execution and index scans are still pending.
+columns, and live auto-increment for omitted auto-increment primary keys.
+Execution is still scan-based, now supports `UPDATE` for non-primary-key
+assignments with affected-row counts, and now supports scan-based `DELETE`
+with affected-row counts. Index scans are still pending.
 
 ## Phase 10 - Transactions and recovery
 - transactions

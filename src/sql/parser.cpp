@@ -327,9 +327,32 @@ CreateTableStatement Parser::parse_create_table(const std::vector<Token>& tokens
         const std::size_t type_name_index = index;
         const Token& type_name = expect(tokens, index++, TokenType::TypeName);
 
+        bool is_primary_key = false;
+        bool is_auto_increment = false;
+
+        while (
+            matches(tokens, index, TokenType::Keyword, "PRIMARY") ||
+            matches(tokens, index, TokenType::Keyword, "AUTOINCREMENT")
+        ) {
+            if (matches(tokens, index, TokenType::Keyword, "PRIMARY")) {
+                ++index;
+                expect(tokens, index++, TokenType::Keyword, "KEY");
+                is_primary_key = true;
+                continue;
+            }
+
+            if (matches(tokens, index, TokenType::Keyword, "AUTOINCREMENT")) {
+                ++index;
+                is_auto_increment = true;
+                continue;
+            }
+        }
+
         columns.push_back(ColumnDefinitionNode{
             column_name.lexeme,
-            parse_type_name(type_name, type_name_index)
+            parse_type_name(type_name, type_name_index),
+            is_primary_key,
+            is_auto_increment
         });
 
         if (matches(tokens, index, TokenType::Comma)) {

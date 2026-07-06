@@ -24,6 +24,7 @@ Current schema pieces:
   - column name
   - column type
   - `is_primary_key`
+  - `is_auto_increment`
 - `Schema`
   - owns a list of column definitions
   - supports both full construction from a vector and incremental
@@ -75,6 +76,8 @@ Current validation:
 - duplicate column names are rejected
 - exactly one schema primary-key column is required
 - the current primary-key column must be `Integer`
+- auto-increment is only valid on the primary-key column
+- auto-increment is only valid for integer columns
 - tables must define at least one index
 - duplicate index names are rejected
 - index definitions must reference existing schema columns
@@ -114,6 +117,10 @@ Current serialized structure:
   - table name
   - heap file name
   - schema columns
+    - column name
+    - column type
+    - primary-key flag
+    - auto-increment flag
   - index definitions
 
 Current deserialization checks:
@@ -128,6 +135,7 @@ The current catalog test verifies:
 - duplicate table rejection
 - empty-name rejection
 - schema fields are stored correctly
+- primary-key and auto-increment column flags are stored correctly
 - unified index definitions include both primary and non-primary indexes
 - `build_table_metadata(...)` succeeds for valid catalog state
 - missing-table lookup and metadata-build failure behavior
@@ -139,6 +147,7 @@ The current catalog test verifies:
 - duplicate index-name rejection
 - non-integer primary-key rejection
 - mismatched primary-index-column rejection
+- invalid auto-increment-on-non-primary-column rejection
 
 ## Current limitations
 - there is no table drop or alter behavior yet

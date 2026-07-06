@@ -20,6 +20,8 @@ enum class SqlTypeName {
 struct ColumnDefinitionNode {
     std::string name;
     SqlTypeName type;
+    bool is_primary_key = false;
+    bool is_auto_increment = false;
 };
 
 struct CreateTableStatement {

@@ -57,7 +57,7 @@ int main() {
 
     {
         const db::sql::Statement statement =
-            parser.parse("CREATE TABLE users (id INTEGER, name STRING);");
+            parser.parse("CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name STRING);");
 
         assert(std::holds_alternative<db::sql::CreateTableStatement>(statement));
 
@@ -69,9 +69,36 @@ int main() {
 
         assert(create_table.columns[0].name == "id");
         assert(create_table.columns[0].type == db::sql::SqlTypeName::Integer);
+        assert(create_table.columns[0].is_primary_key);
+        assert(create_table.columns[0].is_auto_increment);
 
         assert(create_table.columns[1].name == "name");
         assert(create_table.columns[1].type == db::sql::SqlTypeName::String);
+        assert(!create_table.columns[1].is_primary_key);
+        assert(!create_table.columns[1].is_auto_increment);
+    }
+
+    {
+        const db::sql::Statement statement =
+            parser.parse("CREATE TABLE citizens (name STRING, jmbg INTEGER PRIMARY KEY);");
+
+        assert(std::holds_alternative<db::sql::CreateTableStatement>(statement));
+
+        const auto& create_table =
+            std::get<db::sql::CreateTableStatement>(statement);
+
+        assert(create_table.table_name == "citizens");
+        assert(create_table.columns.size() == 2);
+
+        assert(create_table.columns[0].name == "name");
+        assert(create_table.columns[0].type == db::sql::SqlTypeName::String);
+        assert(!create_table.columns[0].is_primary_key);
+        assert(!create_table.columns[0].is_auto_increment);
+
+        assert(create_table.columns[1].name == "jmbg");
+        assert(create_table.columns[1].type == db::sql::SqlTypeName::Integer);
+        assert(create_table.columns[1].is_primary_key);
+        assert(!create_table.columns[1].is_auto_increment);
     }
 
     {
@@ -88,9 +115,13 @@ int main() {
 
         assert(create_table.columns[0].name == "enabled");
         assert(create_table.columns[0].type == db::sql::SqlTypeName::Boolean);
+        assert(!create_table.columns[0].is_primary_key);
+        assert(!create_table.columns[0].is_auto_increment);
 
         assert(create_table.columns[1].name == "created_at");
         assert(create_table.columns[1].type == db::sql::SqlTypeName::Date);
+        assert(!create_table.columns[1].is_primary_key);
+        assert(!create_table.columns[1].is_auto_increment);
     }
 
     {

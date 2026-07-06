@@ -17,6 +17,7 @@ struct ColumnDefinition {
     std::string name;
     ColumnType type;
     bool is_primary_key = false;
+    bool is_auto_increment = false;
 };
 
 class Schema {

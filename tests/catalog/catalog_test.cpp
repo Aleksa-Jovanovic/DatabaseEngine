@@ -11,7 +11,7 @@ int main() {
     db::catalog::Catalog catalog;
 
     db::catalog::Schema user_schema;
-    user_schema.add_column({"id", db::catalog::ColumnType::Integer, true});
+    user_schema.add_column({"id", db::catalog::ColumnType::Integer, true, true});
     user_schema.add_column({"name", db::catalog::ColumnType::String, false});
     user_schema.add_column({"is_active", db::catalog::ColumnType::Boolean, false});
 
@@ -54,10 +54,12 @@ int main() {
     assert(found_users->schema.columns()[0].name == "id");
     assert(found_users->schema.columns()[0].type == db::catalog::ColumnType::Integer);
     assert(found_users->schema.columns()[0].is_primary_key);
+    assert(found_users->schema.columns()[0].is_auto_increment);
 
     assert(found_users->schema.columns()[1].name == "name");
     assert(found_users->schema.columns()[1].type == db::catalog::ColumnType::String);
     assert(!found_users->schema.columns()[1].is_primary_key);
+    assert(!found_users->schema.columns()[1].is_auto_increment);
 
     assert(found_users->indexes.size() == 2);
     assert(found_users->indexes[0].index_name == "users_pkey");
@@ -85,14 +87,17 @@ int main() {
     assert(built_metadata->columns[0].name == "id");
     assert(built_metadata->columns[0].type == db::table::ColumnType::Integer);
     assert(built_metadata->columns[0].is_primary_key);
+    assert(built_metadata->columns[0].is_auto_increment);
 
     assert(built_metadata->columns[1].name == "name");
     assert(built_metadata->columns[1].type == db::table::ColumnType::String);
     assert(!built_metadata->columns[1].is_primary_key);
+    assert(!built_metadata->columns[1].is_auto_increment);
 
     assert(built_metadata->columns[2].name == "is_active");
     assert(built_metadata->columns[2].type == db::table::ColumnType::Boolean);
     assert(!built_metadata->columns[2].is_primary_key);
+    assert(!built_metadata->columns[2].is_auto_increment);
 
     assert(built_metadata->secondary_indexes.size() == 1);
     assert(built_metadata->secondary_indexes[0].index_name == "users_name_idx");
@@ -161,6 +166,10 @@ int main() {
         assert(reopened_definition.has_value());
         assert(reopened_definition->table_name == "users");
         assert(reopened_definition->heap_file_name == "users_heap.db");
+        assert(reopened_definition->schema.columns().size() == 3);
+        assert(reopened_definition->schema.columns()[0].is_primary_key);
+        assert(reopened_definition->schema.columns()[0].is_auto_increment);
+        assert(!reopened_definition->schema.columns()[1].is_auto_increment);
         assert(reopened_definition->indexes.size() == 2);
 
         const auto reopened_table = reopened_catalog.open_table("users", 24);
@@ -276,6 +285,32 @@ int main() {
         };
 
         assert(!mismatched_primary_catalog.create_table(mismatched_primary_table));
+    }
+
+    // Validation: auto-increment is only valid on the primary-key column.
+    {
+        db::catalog::Catalog invalid_auto_increment_catalog;
+        db::catalog::Schema invalid_auto_increment_schema;
+        invalid_auto_increment_schema.add_column({"id", db::catalog::ColumnType::Integer, true, false});
+        invalid_auto_increment_schema.add_column({"serial", db::catalog::ColumnType::Integer, false, true});
+
+        db::catalog::TableDefinition invalid_auto_increment_table{
+            "invalid_auto_increment",
+            invalid_auto_increment_schema,
+            "invalid_auto_increment_heap.db",
+            {
+                {
+                    "invalid_auto_increment_pkey",
+                    "invalid_auto_increment",
+                    "id",
+                    "invalid_auto_increment_primary_index.db",
+                    true,
+                    true
+                }
+            }
+        };
+
+        assert(!invalid_auto_increment_catalog.create_table(invalid_auto_increment_table));
     }
 
     std::filesystem::remove(catalog_file_name);

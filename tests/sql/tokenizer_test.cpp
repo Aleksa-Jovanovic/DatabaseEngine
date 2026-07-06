@@ -24,21 +24,24 @@ int main() {
 
     {
         const std::vector<Token> tokens =
-            tokenizer.tokenize("CREATE TABLE users (id INTEGER, name STRING);");
+            tokenizer.tokenize("CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name STRING);");
 
-        assert(tokens.size() == 12);
+        assert(tokens.size() == 15);
         assert_token(tokens[0], TokenType::Keyword, "CREATE");
         assert_token(tokens[1], TokenType::Keyword, "TABLE");
         assert_token(tokens[2], TokenType::Identifier, "users");
         assert_token(tokens[3], TokenType::LeftParen, "(");
         assert_token(tokens[4], TokenType::Identifier, "id");
         assert_token(tokens[5], TokenType::TypeName, "INTEGER");
-        assert_token(tokens[6], TokenType::Comma, ",");
-        assert_token(tokens[7], TokenType::Identifier, "name");
-        assert_token(tokens[8], TokenType::TypeName, "STRING");
-        assert_token(tokens[9], TokenType::RightParen, ")");
-        assert_token(tokens[10], TokenType::Semicolon, ";");
-        assert_token(tokens[11], TokenType::EndOfInput, "");
+        assert_token(tokens[6], TokenType::Keyword, "PRIMARY");
+        assert_token(tokens[7], TokenType::Keyword, "KEY");
+        assert_token(tokens[8], TokenType::Keyword, "AUTOINCREMENT");
+        assert_token(tokens[9], TokenType::Comma, ",");
+        assert_token(tokens[10], TokenType::Identifier, "name");
+        assert_token(tokens[11], TokenType::TypeName, "STRING");
+        assert_token(tokens[12], TokenType::RightParen, ")");
+        assert_token(tokens[13], TokenType::Semicolon, ";");
+        assert_token(tokens[14], TokenType::EndOfInput, "");
     }
 
     {

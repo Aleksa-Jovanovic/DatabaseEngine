@@ -77,6 +77,7 @@ void serialize_column(std::vector<char>& buffer, const ColumnDefinition& column)
     append_string(buffer, column.name);
     append_u32(buffer, static_cast<std::uint32_t>(column.type));
     append_bool(buffer, column.is_primary_key);
+    append_bool(buffer, column.is_auto_increment);
 }
 
 bool deserialize_column(
@@ -102,6 +103,10 @@ bool deserialize_column(
     column.type = static_cast<ColumnType>(raw_type);
 
     if (!read_bool(data, size, offset, column.is_primary_key)) {
+        return false;
+    }
+
+    if (!read_bool(data, size, offset, column.is_auto_increment)) {
         return false;
     }
 

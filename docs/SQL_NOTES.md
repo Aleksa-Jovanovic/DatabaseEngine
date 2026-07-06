@@ -51,6 +51,9 @@ The tokenizer currently:
 
 Current SQL keywords:
 - `CREATE`
+- `PRIMARY`
+- `KEY`
+- `AUTOINCREMENT`
 - `TABLE`
 - `INSERT`
 - `INTO`
@@ -107,6 +110,8 @@ Current AST pieces:
 - `ColumnDefinitionNode`
   - column name
   - SQL type name
+  - whether the column is declared `PRIMARY KEY`
+  - whether the column is declared `AUTOINCREMENT`
 - `CreateTableStatement`
   - table name
   - column definitions
@@ -162,6 +167,7 @@ Current parser behavior:
 - tokenizes the SQL input
 - recognizes `CREATE TABLE` statements
 - parses column definitions with SQL type names
+- parses optional `PRIMARY KEY` and `AUTOINCREMENT` column constraints
 - builds a typed `CreateTableStatement` AST node
 - recognizes `INSERT INTO ... VALUES (...)` statements
 - recognizes `INSERT INTO ... (column, column) VALUES (...)` statements
@@ -179,7 +185,7 @@ Current parser behavior:
 
 ## Current testing
 The current SQL tokenizer test verifies:
-- tokenization of a basic `CREATE TABLE` statement
+- tokenization of `CREATE TABLE` with `PRIMARY KEY AUTOINCREMENT`
 - tokenization of a basic `INSERT` statement
 - tokenization of a basic `SELECT` statement
 - tokenization of basic `DELETE` and `UPDATE` statements
@@ -189,7 +195,9 @@ The current SQL tokenizer test verifies:
 - throwing `SqlParseError` for an unterminated string literal
 
 The current SQL parser test verifies:
-- parsing a basic `CREATE TABLE` statement into AST form
+- parsing `CREATE TABLE` statements into AST form
+- parsing `PRIMARY KEY` and `AUTOINCREMENT` column flags
+- parsing primary-key columns that are not the first column
 - parsing `BOOLEAN` and `DATE` column types into `SqlTypeName`
 - parsing positional `INSERT` values into AST form
 - parsing named-column `INSERT` values into AST form
@@ -215,6 +223,8 @@ The current SQL parser test verifies:
 - parser currently handles basic `CREATE TABLE`, `INSERT`, `SELECT`,
   `DELETE`, and `UPDATE`
 - AST currently models the basic CRUD SQL surface needed by the next phase
+- `CREATE TABLE` supports inline column-level `PRIMARY KEY` and
+  `AUTOINCREMENT`, but not table-level constraints yet
 - numeric literals are currently integer-only
 - string literals do not yet support escaping
 - date literals are currently represented as strings after `DATE '...'`
@@ -223,7 +233,8 @@ The current SQL parser test verifies:
 - parser does not yet validate updated columns against table schemas
 - parenthesized boolean expressions are not supported yet
 - joins, ordering, grouping, aliases, and aggregates are not supported yet
-- there is no SQL execution path yet
+- SQL execution exists for the current Phase 9 subset, but optimization and
+  richer DDL are still limited
 
 ## Current phase boundary
 Phase 8 is complete for the current parser/tokenizer/AST milestone.

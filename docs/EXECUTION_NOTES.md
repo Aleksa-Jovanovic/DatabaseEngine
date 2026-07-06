@@ -20,6 +20,16 @@ SQL text
 -> ExecutionResult
 ```
 
+For `CREATE TABLE`, the flow is slightly different:
+```text
+SQL text
+-> tokenizer/parser
+-> CreateTableStatement
+-> Executor
+-> Catalog create_table(...)
+-> eager table/index file bootstrap
+```
+
 ## Current executor design
 The current `Executor` lives in the execution layer rather than the SQL layer.
 
@@ -35,6 +45,34 @@ The current `ExecutionResult` contains:
 - result column names
 - result rows
 - affected row count for write statements
+
+## Current CREATE TABLE behavior
+The current executor supports a first SQL-driven table creation path.
+
+Supported form:
+```sql
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name STRING,
+    active BOOLEAN
+);
+```
+
+Current behavior:
+- builds a `catalog::TableDefinition` from the parsed SQL AST
+- maps SQL types into catalog column types
+- requires exactly one `PRIMARY KEY` column through catalog validation
+- supports primary-key columns that are not the first column
+- creates a primary index definition for the primary-key column
+- uses generated file names like `users_heap.db` and
+  `users_primary_index.db`
+- delegates validation and physical bootstrap to `Catalog::create_table(...)`
+
+Current limitation:
+- table-level constraints are not supported yet
+- file names are generated from the table name rather than chosen by SQL
+- secondary indexes are not created from SQL yet
+- `AUTOINCREMENT` is only meaningful for the integer primary-key column
 
 ## Current SELECT behavior
 The current executor supports scan-based `SELECT`.
@@ -81,11 +119,11 @@ The current executor supports table-level `INSERT` execution.
 
 Supported forms:
 - schema-order inserts with all values
-- schema-order inserts that omit the primary key
+- schema-order inserts that omit an auto-increment primary key
 - named-column inserts
 - named-column inserts with reordered columns
 - named-column inserts that omit non-primary columns
-- named-column inserts that omit the primary key
+- named-column inserts that omit an auto-increment primary key
 
 When values are omitted, the executor fills missing non-primary columns with
 simple type defaults:
@@ -94,8 +132,11 @@ simple type defaults:
 - boolean columns default to `false`
 - date columns default to an empty `DateValue`
 
-When the primary key is omitted, the executor asks the opened `Table` for a
-generated primary key and writes that generated key into the row before insert.
+When the primary key is omitted, the executor first checks whether the
+primary-key column is marked `AUTOINCREMENT`. If it is, the executor asks the
+opened `Table` for a generated primary key and writes that generated key into
+the row before insert. If it is not, the insert fails because the caller must
+provide the primary-key value explicitly.
 
 The current table auto-increment counter is live runtime state. It is rebuilt
 by scanning existing rows when a table object opens, and it advances during
@@ -139,7 +180,6 @@ Current limitation:
 - the B+ tree delete path removes leaf entries but does not rebalance yet
 
 ## Current limitations
-- `CREATE TABLE` execution is not wired yet
 - filtering is in-memory after `Table::scan()`
 - no secondary-index lookup during execution yet
 - auto-increment state is rebuilt from table rows on open instead of persisted
@@ -150,6 +190,16 @@ Current limitation:
 - no planner or physical operator tree yet
 
 ## Current test coverage
+The current executor create-table test verifies:
+- SQL-driven `CREATE TABLE`
+- primary-key and auto-increment metadata propagation into catalog definitions
+- generated heap and primary-index file names
+- omitted primary-key insert succeeds for auto-increment tables
+- duplicate table creation failure
+- non-first primary-key columns
+- omitted primary-key insert failure when the primary key is not auto-increment
+- non-integer primary-key rejection
+
 The current executor test verifies:
 - executing `SELECT *`
 - executing projected `SELECT`
@@ -167,6 +217,7 @@ The current executor insert test verifies:
 - reordered named-column inserts
 - omitted non-primary columns with defaults
 - omitted primary key with live auto-increment
+- missing manual primary-key failure when the primary key is not auto-increment
 - manual high primary keys advancing the next generated key
 - duplicate primary-key insert failure
 - missing-table insert failure
@@ -195,4 +246,4 @@ Good next execution milestones:
 - introduce a query-result row type that is separate from storage/table rows
 - add basic planner structure
 - add index-scan execution for primary-key predicates
-- execute `CREATE TABLE`
+- add SQL support for secondary-index creation

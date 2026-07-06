@@ -13,6 +13,9 @@ namespace
 
 const std::unordered_set<std::string> kKeywords = {
     "CREATE",
+    "PRIMARY",
+    "KEY",
+    "AUTOINCREMENT",
     "TABLE",
     "INSERT",
     "INTO",
