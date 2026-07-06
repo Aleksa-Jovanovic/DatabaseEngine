@@ -97,6 +97,18 @@ int main() {
 
     {
         const std::vector<Token> tokens =
+            tokenizer.tokenize("DROP TABLE users;");
+
+        assert(tokens.size() == 5);
+        assert_token(tokens[0], TokenType::Keyword, "DROP");
+        assert_token(tokens[1], TokenType::Keyword, "TABLE");
+        assert_token(tokens[2], TokenType::Identifier, "users");
+        assert_token(tokens[3], TokenType::Semicolon, ";");
+        assert_token(tokens[4], TokenType::EndOfInput, "");
+    }
+
+    {
+        const std::vector<Token> tokens =
             tokenizer.tokenize("UPDATE users SET name = 'Alice', active = TRUE WHERE id <= 42;");
 
         assert(tokens.size() == 16);

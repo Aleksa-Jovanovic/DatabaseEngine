@@ -22,6 +22,7 @@ public:
     explicit Catalog(const std::string& metadata_file_name);
 
     bool create_table(const TableDefinition& table_definition);
+    bool drop_table(const std::string& table_name);
     bool has_table(const std::string& table_name) const;
     std::optional<TableDefinition> find_table_definition(const std::string& table_name) const;
 

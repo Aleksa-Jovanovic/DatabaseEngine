@@ -51,6 +51,7 @@ The tokenizer currently:
 
 Current SQL keywords:
 - `CREATE`
+- `DROP`
 - `PRIMARY`
 - `KEY`
 - `AUTOINCREMENT`
@@ -98,8 +99,8 @@ Error messages now include character positions in the tokenizer and token
 indexes in the parser to make malformed input easier to debug.
 
 ## Current AST and parser model
-The SQL layer now has a first typed AST for `CREATE TABLE`, `INSERT`,
-`SELECT`, `DELETE`, and `UPDATE`.
+The SQL layer now has a first typed AST for `CREATE TABLE`, `DROP TABLE`,
+`INSERT`, `SELECT`, `DELETE`, and `UPDATE`.
 
 Current AST pieces:
 - `SqlTypeName`
@@ -115,6 +116,8 @@ Current AST pieces:
 - `CreateTableStatement`
   - table name
   - column definitions
+- `DropTableStatement`
+  - table name
 - literal value nodes
   - integer literals
   - string literals
@@ -160,8 +163,8 @@ Current AST pieces:
   - assignment list
   - optional `WHERE` expression
 - `Statement`
-  - currently a variant over `CREATE TABLE`, `INSERT`, `SELECT`, `DELETE`,
-    and `UPDATE` statement nodes
+  - currently a variant over `CREATE TABLE`, `DROP TABLE`, `INSERT`,
+    `SELECT`, `DELETE`, and `UPDATE` statement nodes
 
 Current parser behavior:
 - tokenizes the SQL input
@@ -169,6 +172,8 @@ Current parser behavior:
 - parses column definitions with SQL type names
 - parses optional `PRIMARY KEY` and `AUTOINCREMENT` column constraints
 - builds a typed `CreateTableStatement` AST node
+- recognizes `DROP TABLE ...` statements
+- builds a typed `DropTableStatement` AST node
 - recognizes `INSERT INTO ... VALUES (...)` statements
 - recognizes `INSERT INTO ... (column, column) VALUES (...)` statements
 - parses integer, string, boolean, and date literal values
@@ -186,6 +191,7 @@ Current parser behavior:
 ## Current testing
 The current SQL tokenizer test verifies:
 - tokenization of `CREATE TABLE` with `PRIMARY KEY AUTOINCREMENT`
+- tokenization of a basic `DROP TABLE` statement
 - tokenization of a basic `INSERT` statement
 - tokenization of a basic `SELECT` statement
 - tokenization of basic `DELETE` and `UPDATE` statements
@@ -198,6 +204,7 @@ The current SQL parser test verifies:
 - parsing `CREATE TABLE` statements into AST form
 - parsing `PRIMARY KEY` and `AUTOINCREMENT` column flags
 - parsing primary-key columns that are not the first column
+- parsing `DROP TABLE` statements into AST form
 - parsing `BOOLEAN` and `DATE` column types into `SqlTypeName`
 - parsing positional `INSERT` values into AST form
 - parsing named-column `INSERT` values into AST form
@@ -216,12 +223,12 @@ The current SQL parser test verifies:
 - rejection of empty `INSERT` column lists
 - rejection of empty `INSERT` value lists
 - rejection of malformed `SELECT` and `WHERE` statements
-- rejection of malformed `DELETE` and `UPDATE` statements
+- rejection of malformed `DROP TABLE`, `DELETE`, and `UPDATE` statements
 
 ## Current limitations
 - tokenizer only handles a small SQL subset
 - parser currently handles basic `CREATE TABLE`, `INSERT`, `SELECT`,
-  `DELETE`, and `UPDATE`
+  `DELETE`, `UPDATE`, and `DROP TABLE`
 - AST currently models the basic CRUD SQL surface needed by the next phase
 - `CREATE TABLE` supports inline column-level `PRIMARY KEY` and
   `AUTOINCREMENT`, but not table-level constraints yet
@@ -244,6 +251,7 @@ The SQL layer now has:
 - dedicated SQL parse errors
 - a typed AST for the current CRUD SQL subset
 - parser support for `CREATE TABLE`
+- parser support for `DROP TABLE`
 - parser support for `INSERT`
 - parser support for `SELECT`
 - parser support for `DELETE`
@@ -251,9 +259,7 @@ The SQL layer now has:
 - parser support for comparison, `BETWEEN`, `AND`, and `OR` in `WHERE`
 - separate tokenizer and parser tests
 
-The next natural steps are:
-- connect parsed `CREATE TABLE` statements to catalog operations
-- connect parsed `INSERT` statements to table insert operations
-- connect parsed `SELECT` statements to table scans and filtering
-- connect parsed `DELETE` and `UPDATE` statements to table operations
+The next natural parser-side steps are:
 - later extend SQL syntax with parenthesized boolean expressions if needed
+- later add SQL syntax for secondary index creation
+- later add richer DDL such as `ALTER TABLE`

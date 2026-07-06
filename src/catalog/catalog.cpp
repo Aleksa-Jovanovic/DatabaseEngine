@@ -1,5 +1,6 @@
 #include "catalog/catalog.h"
 
+#include <filesystem>
 #include <fstream>
 #include <memory>
 #include <unordered_set>
@@ -25,6 +26,38 @@ table::ColumnType to_table_column_type(ColumnType type) {
     }
 
     return table::ColumnType::String;
+}
+
+bool remove_file_if_exists(const std::string& file_name) {
+    if (file_name.empty()) {
+        return false;
+    }
+
+    std::error_code error;
+    const bool removed = std::filesystem::remove(file_name, error);
+
+    if (error) {
+        return false;
+    }
+
+    // If the file did not exist, remove(...) returns false without an error.
+    // That is okay for DROP TABLE because catalog metadata is the source of truth.
+    (void)removed;
+    return true;
+}
+
+bool remove_table_files(const TableDefinition& table_definition) {
+    if (!remove_file_if_exists(table_definition.heap_file_name)) {
+        return false;
+    }
+
+    for (const IndexDefinition& index_definition : table_definition.indexes) {
+        if (!remove_file_if_exists(index_definition.file_name)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 }  // namespace
@@ -64,6 +97,37 @@ bool Catalog::create_table(const TableDefinition& table_definition) {
     }
 
     return true;
+}
+
+bool Catalog::drop_table(const std::string& table_name) {
+    if (table_name.empty()) {
+        return false;
+    }
+
+    for (auto table_it = metadata_.tables.begin();
+         table_it != metadata_.tables.end();
+         ++table_it) {
+        if (table_it->table_name != table_name) {
+            continue;
+        }
+
+        const TableDefinition table_definition = *table_it;
+
+        if (!remove_table_files(table_definition)) {
+            return false;
+        }
+
+        metadata_.tables.erase(table_it);
+
+        if (!metadata_file_name_.empty() && !save_to_file()) {
+            metadata_.tables.push_back(table_definition);
+            return false;
+        }
+
+        return true;
+    }
+
+    return false;
 }
 
 bool Catalog::has_table(const std::string& table_name) const {

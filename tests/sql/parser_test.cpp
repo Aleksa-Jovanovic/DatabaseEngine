@@ -506,6 +506,31 @@ int main() {
 
     {
         const db::sql::Statement statement =
+            parser.parse("DROP TABLE users;");
+
+        assert(std::holds_alternative<db::sql::DropTableStatement>(statement));
+
+        const auto& drop_table =
+            std::get<db::sql::DropTableStatement>(statement);
+
+        assert(drop_table.table_name == "users");
+    }
+
+    {
+        bool threw = false;
+        try {
+            parser.parse("DROP users;");
+        } catch (const db::sql::SqlParseError& ex) {
+            threw = true;
+            assert(std::string(ex.what()).find("Unexpected token type") != std::string::npos ||
+                   std::string(ex.what()).find("Unexpected token lexeme") != std::string::npos);
+        }
+
+        assert(threw);
+    }
+
+    {
+        const db::sql::Statement statement =
             parser.parse("UPDATE users SET name = 'Alice' WHERE id = 1;");
 
         assert(std::holds_alternative<db::sql::UpdateStatement>(statement));

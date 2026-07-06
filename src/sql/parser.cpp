@@ -73,6 +73,10 @@ Statement Parser::parse(const std::string& sql) const {
         return parse_create_table(tokens);
     }
 
+    if (matches(tokens, 0, TokenType::Keyword, "DROP")) {
+        return parse_drop_table(tokens);
+    }
+
     if (matches(tokens, 0, TokenType::Keyword, "INSERT")) {
         return parse_insert(tokens);
     }
@@ -374,6 +378,22 @@ CreateTableStatement Parser::parse_create_table(const std::vector<Token>& tokens
     return CreateTableStatement{
         table_name.lexeme,
         std::move(columns)
+    };
+}
+
+DropTableStatement Parser::parse_drop_table(const std::vector<Token>& tokens) {
+    std::size_t index = 0;
+
+    expect(tokens, index++, TokenType::Keyword, "DROP");
+    expect(tokens, index++, TokenType::Keyword, "TABLE");
+
+    const Token& table_name = expect(tokens, index++, TokenType::Identifier);
+
+    expect(tokens, index++, TokenType::Semicolon);
+    expect(tokens, index++, TokenType::EndOfInput);
+
+    return DropTableStatement{
+        table_name.lexeme
     };
 }
 

@@ -13,6 +13,7 @@ namespace
 
 const std::unordered_set<std::string> kKeywords = {
     "CREATE",
+    "DROP",
     "PRIMARY",
     "KEY",
     "AUTOINCREMENT",

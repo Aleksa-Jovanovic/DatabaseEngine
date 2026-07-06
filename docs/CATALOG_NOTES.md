@@ -63,6 +63,7 @@ The current `Catalog` now supports both:
 
 Current public behavior:
 - create a table definition
+- drop a table definition
 - check whether a table exists
 - find a table definition by name
 - open a runtime `Table` from catalog metadata
@@ -92,6 +93,11 @@ Current persistence behavior:
   waiting for first access
 - `create_table(...)` persists immediately for file-backed catalogs
 - if a save fails during `create_table(...)`, the in-memory append is rolled back
+- `drop_table(...)` removes the table definition and attempts to delete the
+  heap file plus all index files listed in the catalog metadata
+- missing physical files are treated as acceptable during drop, but filesystem
+  errors cause the drop to fail
+- `drop_table(...)` persists immediately for file-backed catalogs
 
 ## Current Table reconstruction flow
 The first important catalog-to-runtime bridge is now implemented.
@@ -143,6 +149,8 @@ The current catalog test verifies:
 - `open_table(...)` succeeds for known tables and fails for unknown ones
 - file-backed catalog metadata persists across reopen
 - reopened catalog can still reconstruct and open a known table
+- table drop removes metadata plus heap/index files
+- repeated drop of the same table fails cleanly
 - duplicate column-name rejection
 - duplicate index-name rejection
 - non-integer primary-key rejection
@@ -150,11 +158,13 @@ The current catalog test verifies:
 - invalid auto-increment-on-non-primary-column rejection
 
 ## Current limitations
-- there is no table drop or alter behavior yet
+- there is no alter-table behavior yet
 - catalog currently bridges to the existing table runtime shape rather than to
   a fully catalog-driven runtime engine
 - persistence format versioning is still minimal and only handles one version
 - there is no explicit crash-safety or write-ahead logging for catalog writes
+- if file deletion succeeds but saving the updated file-backed catalog fails,
+  in-memory metadata is restored but physical files are not recreated
 - validation still returns only boolean success/failure rather than structured
   error information
 
@@ -168,4 +178,5 @@ The catalog now exists as:
 - a bridge into runtime table construction
 - a first catalog serializer and reopen path
 - eager physical table bootstrap during catalog table creation
+- table drop with physical heap/index file removal
 - first table-definition validation rules

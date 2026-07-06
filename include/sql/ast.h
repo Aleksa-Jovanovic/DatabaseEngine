@@ -30,6 +30,12 @@ struct CreateTableStatement {
 };
 // CreateTableStatement - END
 
+// DropTableStatement - BEGIN
+struct DropTableStatement {
+    std::string table_name;
+};
+// DropTableStatement - END
+
 // InsertStatement - BEGIN
 struct IntegerLiteral {
     std::int64_t value;
@@ -134,6 +140,7 @@ struct UpdateStatement {
 
 using Statement = std::variant<
     CreateTableStatement,
+    DropTableStatement,
     InsertStatement,
     SelectStatement,
     DeleteStatement,

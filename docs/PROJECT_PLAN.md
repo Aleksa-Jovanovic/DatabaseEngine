@@ -155,7 +155,8 @@ The project now has a first execution layer with an `Executor` and
 The current executor supports scan-based `SELECT`, explicit projection,
 comparison filtering, `BETWEEN`, and logical `AND`/`OR` filtering with
 parser-provided SQL precedence. It also supports SQL-driven `CREATE TABLE`
-with `PRIMARY KEY` and `AUTOINCREMENT` column metadata, `INSERT` execution with
+with `PRIMARY KEY` and `AUTOINCREMENT` column metadata, SQL-driven
+`DROP TABLE` with catalog and physical-file cleanup, `INSERT` execution with
 schema-order values, named columns, simple defaults for omitted non-primary
 columns, and live auto-increment for omitted auto-increment primary keys.
 Execution is still scan-based, now supports `UPDATE` for non-primary-key

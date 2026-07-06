@@ -770,6 +770,10 @@ ExecutionResult Executor::execute(const sql::Statement& statement) {
         return execute_create_table(std::get<sql::CreateTableStatement>(statement));
     }
 
+    if (std::holds_alternative<sql::DropTableStatement>(statement)) {
+        return execute_drop_table(std::get<sql::DropTableStatement>(statement));
+    }
+
     return ExecutionResult{
         false,
         "Statement execution is not supported yet",
@@ -1123,6 +1127,26 @@ ExecutionResult Executor::execute_create_table(
 
     if (!catalog_.create_table(table_definition)) {
         return ExecutionResult{false, "CREATE TABLE failed validation", {}, {}, 0};
+    }
+
+    return ExecutionResult{true, "", {}, {}, 0};
+}
+
+ExecutionResult Executor::execute_drop_table(
+    const sql::DropTableStatement& drop_table_statement
+) {
+    if (drop_table_statement.table_name.empty()) {
+        return ExecutionResult{false, "Table name cannot be empty", {}, {}, 0};
+    }
+
+    if (!catalog_.drop_table(drop_table_statement.table_name)) {
+        return ExecutionResult{
+            false,
+            "DROP TABLE failed: " + drop_table_statement.table_name,
+            {},
+            {},
+            0
+        };
     }
 
     return ExecutionResult{true, "", {}, {}, 0};

@@ -152,6 +152,63 @@ int main() {
     const auto missing_open = catalog.open_table("missing_table");
     assert(missing_open == nullptr);
 
+    // Drop should remove the table definition and its physical heap/index files.
+    {
+        const std::string drop_heap_file_name = "drop_catalog_users_heap.db";
+        const std::string drop_primary_index_file_name =
+            "drop_catalog_users_primary_index.db";
+        const std::string drop_secondary_index_file_name =
+            "drop_catalog_users_name_index.db";
+
+        std::filesystem::remove(drop_heap_file_name);
+        std::filesystem::remove(drop_primary_index_file_name);
+        std::filesystem::remove(drop_secondary_index_file_name);
+
+        db::catalog::Catalog drop_catalog;
+        db::catalog::Schema drop_schema;
+        drop_schema.add_column({"id", db::catalog::ColumnType::Integer, true, true});
+        drop_schema.add_column({"name", db::catalog::ColumnType::String, false});
+
+        db::catalog::TableDefinition drop_table{
+            "drop_catalog_users",
+            drop_schema,
+            drop_heap_file_name,
+            {
+                {
+                    "drop_catalog_users_pkey",
+                    "drop_catalog_users",
+                    "id",
+                    drop_primary_index_file_name,
+                    true,
+                    true
+                },
+                {
+                    "drop_catalog_users_name_idx",
+                    "drop_catalog_users",
+                    "name",
+                    drop_secondary_index_file_name,
+                    false,
+                    true
+                }
+            }
+        };
+
+        assert(drop_catalog.create_table(drop_table));
+        assert(drop_catalog.has_table("drop_catalog_users"));
+        assert(std::filesystem::exists(drop_heap_file_name));
+        assert(std::filesystem::exists(drop_primary_index_file_name));
+        assert(std::filesystem::exists(drop_secondary_index_file_name));
+
+        assert(drop_catalog.drop_table("drop_catalog_users"));
+        assert(!drop_catalog.has_table("drop_catalog_users"));
+        assert(!drop_catalog.find_table_definition("drop_catalog_users").has_value());
+        assert(!std::filesystem::exists(drop_heap_file_name));
+        assert(!std::filesystem::exists(drop_primary_index_file_name));
+        assert(!std::filesystem::exists(drop_secondary_index_file_name));
+
+        assert(!drop_catalog.drop_table("drop_catalog_users"));
+    }
+
     {
         db::catalog::Catalog persistent_catalog(catalog_file_name);
         assert(persistent_catalog.create_table(users_table));

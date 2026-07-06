@@ -30,6 +30,17 @@ SQL text
 -> eager table/index file bootstrap
 ```
 
+For `DROP TABLE`, execution goes through the catalog as well:
+```text
+SQL text
+-> tokenizer/parser
+-> DropTableStatement
+-> Executor
+-> Catalog drop_table(...)
+-> catalog metadata removal
+-> heap/index file removal
+```
+
 ## Current executor design
 The current `Executor` lives in the execution layer rather than the SQL layer.
 
@@ -73,6 +84,27 @@ Current limitation:
 - file names are generated from the table name rather than chosen by SQL
 - secondary indexes are not created from SQL yet
 - `AUTOINCREMENT` is only meaningful for the integer primary-key column
+
+## Current DROP TABLE behavior
+The current executor supports a first SQL-driven table drop path.
+
+Supported form:
+```sql
+DROP TABLE users;
+```
+
+Current behavior:
+- delegates to `Catalog::drop_table(...)`
+- removes the table definition from catalog metadata
+- removes the heap file
+- removes the primary and secondary index files listed in catalog metadata
+- returns `affected_rows = 0` because this is DDL, not row-level DML
+
+Current limitation:
+- drop is not crash-safe or transactional
+- if physical file removal succeeds but catalog persistence fails, the current
+  implementation restores in-memory metadata but does not recreate deleted
+  files
 
 ## Current SELECT behavior
 The current executor supports scan-based `SELECT`.
@@ -199,6 +231,13 @@ The current executor create-table test verifies:
 - non-first primary-key columns
 - omitted primary-key insert failure when the primary key is not auto-increment
 - non-integer primary-key rejection
+
+The current executor drop-table test verifies:
+- SQL-driven `DROP TABLE`
+- catalog metadata removal
+- heap and primary-index file removal
+- failed `SELECT` after drop
+- repeated drop failure
 
 The current executor test verifies:
 - executing `SELECT *`
