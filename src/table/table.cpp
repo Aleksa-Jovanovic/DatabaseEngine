@@ -1,7 +1,9 @@
 #include "table/table.h"
 
+#include "index/index_key.h"
 #include "table/row_serializer.h"
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -42,10 +44,19 @@ std::optional<RowId> Table::insert(const Row& row) {
         return std::nullopt;
     }
 
-    const auto index_result = primary_index_.insert(row.key, row_id.value());
+    const auto index_result = primary_index_.insert(
+        index::encode_primary_key(row.key), 
+        row_id.value()
+    );
     if (!index_result.has_value()) {
         // Keep heap scans consistent with indexed lookups if primary-index
         // insertion fails after the row was already written.
+        heap_file_.delete_record(row_id.value());
+        return std::nullopt;
+    }
+
+    if (!insert_secondary_index_entries(row, row_id.value())) {
+        primary_index_.delete_key(index::encode_primary_key(row.key));
         heap_file_.delete_record(row_id.value());
         return std::nullopt;
     }
@@ -57,7 +68,7 @@ std::optional<RowId> Table::insert(const Row& row) {
 
 std::optional<Row> Table::get_by_key(std::uint32_t key) {
     // Resolve the key to a physical row location through the primary index first.
-    const auto row_id = primary_index_.search(key);
+    const auto row_id = primary_index_.search(index::encode_primary_key(key));
     if (!row_id.has_value()) {
         return std::nullopt;
     }
@@ -112,8 +123,23 @@ bool Table::update_by_key(std::uint32_t key, const Row& updated_row) {
     }
 
     // Resolve the logical key to a physical row location through the index.
-    const auto row_id = primary_index_.search(key);
+    const auto row_id = primary_index_.search(index::encode_primary_key(key));
     if (!row_id.has_value()) {
+        return false;
+    }
+
+    const auto old_record = heap_file_.get_var_record(row_id.value());
+    if (!old_record.has_value()) {
+        return false;
+    }
+
+    const auto old_row = RowSerializer::deserialize(
+        old_record->key,
+        old_record->value.data(),
+        old_record->value.size()
+    );
+
+    if (!old_row.has_value()) {
         return false;
     }
 
@@ -133,11 +159,22 @@ bool Table::update_by_key(std::uint32_t key, const Row& updated_row) {
     // If the variable-length update moved the row, repair the index mapping.
     if (updated_row_id.value().page_id != row_id->page_id ||
         updated_row_id.value().slot_index != row_id->slot_index) {
-        const auto index_update_result =
-            primary_index_.update(key, updated_row_id.value());
+        const auto index_update_result = primary_index_.update(
+            index::encode_primary_key(key),
+            updated_row_id.value()
+        );
+
         if (!index_update_result.has_value()) {
             return false;
         }
+    }
+
+    if (!update_secondary_index_entries(
+            old_row.value(),
+            updated_row,
+            updated_row_id.value()
+        )) {
+        return false;
     }
 
     return true;
@@ -149,12 +186,31 @@ bool Table::update_by_key(std::uint32_t key, const Row& updated_row) {
 // This has the opposite risk: if index delete succeeds and heap delete fails,
 // the row becomes unreachable by index but may still appear in full heap scan.
 bool Table::delete_by_key(std::uint32_t key) {
-    const auto row_id = primary_index_.search(key);
+    const auto row_id = primary_index_.search(index::encode_primary_key(key));
     if (!row_id.has_value()) {
         return false;
     }
 
-    const auto deleted_index_entry = primary_index_.delete_key(key);
+    // We first need to fetch/deserialise the row using the RowId before deleting anything
+    const auto record = heap_file_.get_var_record(row_id.value());
+    if (!record.has_value()) {
+        return false;
+    }
+
+    const auto row = RowSerializer::deserialize(
+        record->key,
+        record->value.data(),
+        record->value.size()
+    );
+    if (!row.has_value()) {
+        return false;
+    }
+
+    if (!delete_secondary_index_entries(row.value())) {
+        return false;
+    }
+
+    const auto deleted_index_entry = primary_index_.delete_key(index::encode_primary_key(key));
     if (!deleted_index_entry.has_value()) {
         return false;
     }
@@ -318,6 +374,162 @@ void Table::initialize_next_primary_key_value() {
     for (const Row& row : rows) {
         advance_next_primary_key_value(row.key);
     }
+}
+
+std::optional<index::IndexKey> Table::encode_secondary_key_for_row(
+    const Row& row,
+    const std::string& column_name
+) const {
+    const auto column_it = std::find_if(
+        metadata_.columns.begin(),
+        metadata_.columns.end(),
+        [&](const auto& column) {
+            return column.name == column_name;
+        }
+    );
+
+    if (column_it == metadata_.columns.end()) {
+        return std::nullopt;
+    }
+
+    const std::size_t column_index =
+        static_cast<std::size_t>(std::distance(metadata_.columns.begin(), column_it));
+
+    if (column_index >= row.values.size()) {
+        return std::nullopt;
+    }
+
+    const auto* indexed_value = std::get_if<std::int64_t>(&row.values[column_index]);
+    if (indexed_value == nullptr) {
+        return std::nullopt;
+    }
+
+    return index::encode_secondary_integer_key(*indexed_value, row.key);
+}
+
+bool Table::insert_secondary_index_entries(
+    const Row& row,
+    const RowId& row_id
+) {
+    std::vector<std::pair<std::string, index::IndexKey>> inserted_keys;
+
+    for (auto& secondary_index_entry : secondary_indexes_) {
+        const std::string& index_name = secondary_index_entry.first;
+        SecondaryIndexInfo& index_info = secondary_index_entry.second;
+
+        const auto encoded_key = encode_secondary_key_for_row(
+            row,
+            index_info.column_name
+        );
+
+        if (!encoded_key.has_value()) {
+            for (const auto& inserted_key : inserted_keys) {
+                auto it = secondary_indexes_.find(inserted_key.first);
+                if (it != secondary_indexes_.end()) {
+                    it->second.tree->delete_key(inserted_key.second);
+                }
+            }
+
+            return false;
+        }
+
+        const auto inserted_index_entry = index_info.tree->insert(
+            encoded_key.value(),
+            row_id
+        );
+
+        if (!inserted_index_entry.has_value()) {
+            for (const auto& inserted_key : inserted_keys) {
+                auto it = secondary_indexes_.find(inserted_key.first);
+                if (it != secondary_indexes_.end()) {
+                    it->second.tree->delete_key(inserted_key.second);
+                }
+            }
+
+            return false;
+        }
+
+        inserted_keys.push_back({index_name, encoded_key.value()});
+    }
+
+    return true;
+}
+
+bool Table::delete_secondary_index_entries(const Row& row) {
+    for (auto& secondary_index_entry : secondary_indexes_) {
+        SecondaryIndexInfo& index_info = secondary_index_entry.second;
+
+        const auto encoded_key = encode_secondary_key_for_row(
+            row,
+            index_info.column_name
+        );
+
+        if (!encoded_key.has_value()) {
+            return false;
+        }
+
+        const auto deleted_entry = index_info.tree->delete_key(encoded_key.value());
+        if (!deleted_entry.has_value()) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool Table::update_secondary_index_entries(
+    const Row& old_row,
+    const Row& new_row,
+    const RowId& new_row_id
+) {
+    for (auto& secondary_index_entry : secondary_indexes_) {
+        SecondaryIndexInfo& index_info = secondary_index_entry.second;
+
+        const auto old_encoded_key = encode_secondary_key_for_row(
+            old_row,
+            index_info.column_name
+        );
+        const auto new_encoded_key = encode_secondary_key_for_row(
+            new_row,
+            index_info.column_name
+        );
+
+        if (!old_encoded_key.has_value() || !new_encoded_key.has_value()) {
+            return false;
+        }
+
+        // Secondary index keys include the indexed value, so changing that
+        // value requires moving the entry instead of only updating its RowId.
+        if (old_encoded_key.value() == new_encoded_key.value()) {
+            const auto updated_entry = index_info.tree->update(
+                old_encoded_key.value(),
+                new_row_id
+            );
+
+            if (!updated_entry.has_value()) {
+                return false;
+            }
+
+            continue;
+        }
+
+        const auto deleted_entry = index_info.tree->delete_key(
+            old_encoded_key.value()
+        );
+        if (!deleted_entry.has_value()) {
+            return false;
+        }
+
+        const auto inserted_entry = index_info.tree->insert(
+            new_encoded_key.value(),
+            new_row_id
+        );
+        if (!inserted_entry.has_value()) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 }  // namespace db::table

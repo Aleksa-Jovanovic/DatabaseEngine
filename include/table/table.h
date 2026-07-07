@@ -58,6 +58,22 @@ private:
     bool validate_row(const Row& row) const;
     void initialize_next_primary_key_value();
     void advance_next_primary_key_value(std::uint32_t key);
+
+    std::optional<index::IndexKey> encode_secondary_key_for_row(
+        const Row& row,
+        const std::string& column_name
+    ) const;
+
+    bool insert_secondary_index_entries(
+        const Row& row,
+        const RowId& row_id
+    );
+    bool delete_secondary_index_entries(const Row& row);
+    bool update_secondary_index_entries(
+        const Row& old_row, 
+        const Row& new_row, 
+        const RowId& new_row_id
+    );
 };
 
 }  // namespace db::table

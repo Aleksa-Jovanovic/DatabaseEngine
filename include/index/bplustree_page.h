@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <limits>
 
+#include "index/index_key.h"
+
 namespace db::index {
 
 constexpr std::uint32_t INVALID_PAGE_ID = 

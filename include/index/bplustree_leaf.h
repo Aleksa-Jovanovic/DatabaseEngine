@@ -9,7 +9,7 @@
 namespace db::index {
 
 struct BPlusTreeLeafEntry {
-    std::uint32_t key;
+    IndexKey key;
     RowId row_id;
 };
 
@@ -29,9 +29,9 @@ public:
     std::uint16_t max_size() const;
     bool is_full() const;
 
-    const BPlusTreeLeafEntry* find_entry(std::uint32_t key) const;
-    bool insert_entry(std::uint32_t key, const RowId& row_id);
-    bool delete_entry(std::uint32_t key);
+    const BPlusTreeLeafEntry* find_entry(IndexKey key) const;
+    bool insert_entry(IndexKey key, const RowId& row_id);
+    bool delete_entry(IndexKey key);
 
     BPlusTreeLeafEntry* entry_at(std::uint16_t index);
     const BPlusTreeLeafEntry* entry_at(std::uint16_t index) const;
@@ -50,8 +50,8 @@ private:
     BPlusTreeLeafEntry* entries();
     const BPlusTreeLeafEntry* entries() const;
 
-    std::int32_t find_key_index(std::uint32_t key) const;
-    std::uint16_t find_insert_position(std::uint32_t key) const;
+    std::int32_t find_key_index(IndexKey key) const;
+    std::uint16_t find_insert_position(IndexKey key) const;
 };
 
 }  // namespace db::index

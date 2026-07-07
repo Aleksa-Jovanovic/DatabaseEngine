@@ -109,10 +109,15 @@ The current table insert works like this:
 3. insert the full `VarRecord` into the heap file
 4. receive a `RowId` for the inserted row
 5. insert `key -> RowId` into the primary B+ tree
+6. insert maintained secondary-index entries for the row
 
 If the heap insert succeeds but primary-index insertion fails, the table layer
 deletes the just-written heap row. This keeps heap scans consistent with
 primary-key lookups when duplicate keys or other index failures happen.
+
+If secondary-index insertion fails after the heap and primary index succeed,
+the table layer deletes the primary-index entry and heap row. It also rolls back
+secondary-index entries already inserted during that same operation.
 
 When column metadata is available, inserts validate the row before writing:
 - the number of row values must match the number of columns
@@ -151,13 +156,17 @@ The current table layer has a first `update_by_key(...)` implementation.
 Current behavior:
 - resolve the key through the primary index
 - get the corresponding `RowId`
+- read the old row before overwriting it
 - validate the updated row when column metadata is available
 - update the heap record through the variable-length storage path
 - repair the primary-index mapping if the updated row moves to a new `RowId`
+- update maintained secondary-index entries
 
 Current limitation:
 - only same-key updates are allowed
 - changing the primary key is rejected
+- secondary-index update maintenance is not fully rollback-safe if a later
+  secondary-index write fails after an earlier one has already changed
 
 This keeps the first update path simple because changing the indexed key would
 require coordinated index maintenance that is intentionally deferred.
@@ -168,13 +177,16 @@ The current table API supports primary-key-based delete through
 
 Current behavior:
 - resolve the key through the primary B+ tree
+- read the stored row so secondary-index keys can be reconstructed
+- delete maintained secondary-index entries
 - delete the key from the primary index
 - delete the matching heap record
 - return `false` when the key does not exist
 
 Current limitation:
-- secondary indexes are not maintained yet
 - there is no rollback if primary-index delete succeeds and heap delete fails
+- there is no rollback if secondary-index delete succeeds and a later delete
+  step fails
 
 The current delete order prefers avoiding duplicate stale index entries, but a
 crash or heap-delete failure between index delete and heap delete could leave a
@@ -192,6 +204,12 @@ Current `add_secondary_index(...)` behavior:
 - stores runtime secondary-index information in the table object
 - stores matching `IndexMetadata` entries in `TableMetadata`
 
+Current secondary-index key model:
+- primary index keys are explicitly encoded with `encode_primary_key(...)`
+- integer secondary index keys are encoded as `(indexed_value, primary_key)`
+- duplicate indexed values are supported because the primary key makes each
+  encoded secondary key unique
+
 Current metadata-load behavior:
 - reconstructs runtime secondary-index objects from `TableMetadata`
 - skips incomplete metadata entries with missing index names or file names
@@ -200,13 +218,14 @@ Current metadata-load behavior:
 
 Current limitation:
 - secondary-index registration does not yet backfill existing rows
-- secondary indexes are not yet maintained during insert, update, or delete
 - arbitrary column names can already appear in metadata, but that metadata is
   still future-facing until broader index-key support exists
-- the current uniqueness flag is still constrained by the existing B+ tree,
-  which currently rejects duplicate keys
 - SQL/catalog index management currently limits secondary indexes to
-  non-primary integer columns for that reason
+  non-primary integer columns
+- secondary indexes are maintained on new inserts, same-primary-key updates,
+  and deletes after the index exists
+- secondary-index maintenance is not yet transactional or rollback-safe across
+  every partial-failure scenario
 
 ## Current test coverage
 The current table integration test verifies:
@@ -221,6 +240,8 @@ The current table integration test verifies:
 - primary-key delete behavior through index lookup plus heap delete
 - schema-backed row validation for field count, field type, and primary-key value
 - persistence across reopen through heap and primary index files
+- secondary-index insert, update, and delete maintenance through direct B+
+  tree verification of encoded secondary keys
 
 The current row-serialization test verifies:
 - serialize typed row fields into bytes
@@ -251,7 +272,8 @@ into separate configuration fields.
 - auto-increment metadata is persisted through catalog definitions
 - auto-increment counter state is rebuilt from table rows on open instead of
   persisted as a stored sequence value
-- no secondary-index backfill or maintenance yet
+- no secondary-index backfill for rows that existed before index creation yet
+- secondary-index maintenance is not transactional or rollback-safe yet
 - delete does not rebalance the B+ tree yet
 - delete is not transactional or rollback-safe yet
 

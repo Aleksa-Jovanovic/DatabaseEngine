@@ -61,7 +61,7 @@ const BPlusTreeInternalEntry* BPlusTreeInternalPage::entry_at(std::uint16_t inde
     return &entries()[index];
 }
 
-std::uint32_t BPlusTreeInternalPage::find_child_page_id(std::uint32_t key) const {
+std::uint32_t BPlusTreeInternalPage::find_child_page_id(IndexKey key) const {
     std::uint32_t candidate = leftmost_child_page_id();
 
     for (std::uint16_t i = 0; i < key_count(); ++i) {
@@ -82,7 +82,7 @@ std::uint32_t BPlusTreeInternalPage::find_child_page_id(std::uint32_t key) const
 
 bool BPlusTreeInternalPage::insert_after_child(
     std::uint32_t left_child_page_id,
-    std::uint32_t key,
+    IndexKey key,
     std::uint32_t right_child_page_id
 ) {
     if (is_full()) {
@@ -146,7 +146,7 @@ const BPlusTreeInternalEntry* BPlusTreeInternalPage::entries() const {
     );
 }
 
-std::int32_t BPlusTreeInternalPage::find_key_index(std::uint32_t key) const {
+std::int32_t BPlusTreeInternalPage::find_key_index(IndexKey key) const {
     for (std::uint16_t i = 0; i < key_count(); ++i) {
         const BPlusTreeInternalEntry* entry = entry_at(i);
         if (entry == nullptr) {

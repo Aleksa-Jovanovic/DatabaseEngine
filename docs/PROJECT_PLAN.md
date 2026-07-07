@@ -162,8 +162,11 @@ execution with schema-order values, named columns, simple defaults for omitted
 non-primary columns, and live auto-increment for omitted auto-increment primary
 keys. Execution is still scan-based, now supports `UPDATE` for non-primary-key
 assignments with affected-row counts, and now supports scan-based `DELETE`
-with affected-row counts. Index scans and secondary-index write maintenance
-are still pending.
+with affected-row counts. The table layer now maintains integer secondary
+indexes on insert, same-primary-key update, and delete using encoded
+`(indexed_value, primary_key)` B+ tree keys. Index scans, secondary-index
+backfill for pre-existing rows, non-integer secondary indexes, and
+transactional index-maintenance rollback are still pending.
 
 ## Phase 10 - Transactions and recovery
 - transactions

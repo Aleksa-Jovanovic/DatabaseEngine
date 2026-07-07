@@ -47,7 +47,7 @@ bool BPlusTreeLeafPage::is_full() const {
     return key_count() >= max_size();
 }
 
-const BPlusTreeLeafEntry* BPlusTreeLeafPage::find_entry(std::uint32_t key) const {
+const BPlusTreeLeafEntry* BPlusTreeLeafPage::find_entry(IndexKey key) const {
     const std::int32_t index = find_key_index(key);
     if (index < 0) {
         return nullptr;
@@ -56,7 +56,7 @@ const BPlusTreeLeafEntry* BPlusTreeLeafPage::find_entry(std::uint32_t key) const
     return entry_at(static_cast<std::uint16_t>(index));
 }
 
-bool BPlusTreeLeafPage::insert_entry(std::uint32_t key, const RowId& row_id) {
+bool BPlusTreeLeafPage::insert_entry(IndexKey key, const RowId& row_id) {
     if (is_full()) {
         return false;
     }
@@ -80,7 +80,7 @@ bool BPlusTreeLeafPage::insert_entry(std::uint32_t key, const RowId& row_id) {
     return true;
 }
 
-bool BPlusTreeLeafPage::delete_entry(std::uint32_t key) {
+bool BPlusTreeLeafPage::delete_entry(IndexKey key) {
     const std::int32_t key_index = find_key_index(key);
     if (key_index < 0) {
         return false;
@@ -145,7 +145,7 @@ const BPlusTreeLeafEntry* BPlusTreeLeafPage::entries() const {
     );
 }
 
-std::int32_t BPlusTreeLeafPage::find_key_index(std::uint32_t key) const {
+std::int32_t BPlusTreeLeafPage::find_key_index(IndexKey key) const {
     for (std::uint16_t i = 0; i < key_count(); ++i) {
         const BPlusTreeLeafEntry* entry = entry_at(i);
         if (entry == nullptr) {
@@ -164,7 +164,7 @@ std::int32_t BPlusTreeLeafPage::find_key_index(std::uint32_t key) const {
     return -1;
 }
 
-std::uint16_t BPlusTreeLeafPage::find_insert_position(std::uint32_t key) const {
+std::uint16_t BPlusTreeLeafPage::find_insert_position(IndexKey key) const {
     std::uint16_t i = 0;
 
     while (i < key_count()) {

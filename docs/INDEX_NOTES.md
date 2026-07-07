@@ -54,14 +54,19 @@ Lookup flow:
 4. read the full stored row payload from the heap
 
 ## Current design direction for Phase 5
-The first B+ tree version should likely use:
-- `uint32_t` keys
+The first B+ tree version uses:
+- `IndexKey` keys, currently backed by `uint64_t`
 - `RowId` as leaf payload
 - heap pages as the source of full row data
 
 This keeps the architecture aligned with a normal heap-plus-index design:
 - heap file stores full rows
 - index stores search keys plus references to heap rows
+
+Primary keys are encoded into `IndexKey` with `encode_primary_key(...)`.
+Integer secondary indexes encode `(indexed_value, primary_key)` into one
+`IndexKey`. This allows duplicate indexed values while keeping every concrete
+B+ tree key unique.
 
 ## B+ tree pages vs storage pages
 A B+ tree page is different from the slotted heap pages already implemented in
@@ -164,7 +169,7 @@ Internal-page responsibilities:
 
 ## First Phase 5 implementation direction
 For the first working B+ tree version, a good scope would be:
-- `uint32_t` keys
+- fixed-width `IndexKey` keys
 - `RowId` payloads in leaf pages
 - fixed-size leaf entries
 - fixed-size internal entries
@@ -245,12 +250,12 @@ Common page header:
 
 Leaf entry:
 - `BPlusTreeLeafEntry`
-  - `uint32_t key`
+  - `IndexKey key`
   - `RowId row_id`
 
 Internal entry:
 - `BPlusTreeInternalEntry`
-  - `uint32_t key`
+  - `IndexKey key`
   - `uint32_t child_page_id`
 
 ### Important internal-page note

@@ -22,12 +22,12 @@ struct BPlusTreeMetadataPage {
 };
 
 struct TempLeafEntry {
-    std::uint32_t key;
+    IndexKey key;
     RowId row_id;
 };
 
 struct TempInternalNode {
-    std::vector<std::uint32_t> keys;
+    std::vector<IndexKey> keys;
     std::vector<std::uint32_t> child_page_ids;
 };
 }
@@ -116,7 +116,7 @@ std::uint16_t BPlusTree::internal_node_max_size() const {
     );
 }
 
-std::optional<RowId> BPlusTree::search(std::uint32_t key) {
+std::optional<RowId> BPlusTree::search(IndexKey key) {
     if (root_page_id_ == INVALID_PAGE_ID) {
         return std::nullopt;
     }
@@ -159,7 +159,7 @@ std::optional<RowId> BPlusTree::search(std::uint32_t key) {
     }
 }
 
-std::optional<RowId> BPlusTree::insert(std::uint32_t key, const RowId& row_id) {
+std::optional<RowId> BPlusTree::insert(IndexKey key, const RowId& row_id) {
     if (root_page_id_ == INVALID_PAGE_ID) {
         return create_initial_tree(key, row_id);
     }
@@ -186,7 +186,7 @@ std::optional<RowId> BPlusTree::insert(std::uint32_t key, const RowId& row_id) {
     return split_leaf_and_insert(leaf_page_id.value(), key, row_id);
 }
 
-std::optional<RowId> BPlusTree::update(std::uint32_t key, const RowId& row_id) {
+std::optional<RowId> BPlusTree::update(IndexKey key, const RowId& row_id) {
     const auto leaf_page_id = find_leaf_page_id(key);
     if (!leaf_page_id.has_value()) {
         return std::nullopt;
@@ -223,7 +223,7 @@ std::optional<RowId> BPlusTree::update(std::uint32_t key, const RowId& row_id) {
     return std::nullopt;
 }
 
-std::optional<RowId> BPlusTree::delete_key(std::uint32_t key) {
+std::optional<RowId> BPlusTree::delete_key(IndexKey key) {
     const auto leaf_page_id = find_leaf_page_id(key);
     if (!leaf_page_id.has_value()) {
         return std::nullopt;
@@ -253,7 +253,7 @@ std::optional<RowId> BPlusTree::delete_key(std::uint32_t key) {
     return deleted_row_id;
 }
 
-std::optional<RowId> BPlusTree::create_initial_tree(std::uint32_t key, const RowId& row_id) {
+std::optional<RowId> BPlusTree::create_initial_tree(IndexKey key, const RowId& row_id) {
     Page* root_page = page_cache_manager_.new_page();
     if (root_page == nullptr) {
         return std::nullopt;
@@ -277,7 +277,7 @@ std::optional<RowId> BPlusTree::create_initial_tree(std::uint32_t key, const Row
     return row_id;
 }
 
-std::optional<std::uint32_t> BPlusTree::find_leaf_page_id(std::uint32_t key) {
+std::optional<std::uint32_t> BPlusTree::find_leaf_page_id(IndexKey key) {
     if (root_page_id_ == INVALID_PAGE_ID) {
         return std::nullopt;
     }
@@ -312,7 +312,7 @@ std::optional<std::uint32_t> BPlusTree::find_leaf_page_id(std::uint32_t key) {
     }
 }
 
-std::optional<RowId> BPlusTree::insert_into_leaf(std::uint32_t leaf_page_id, std::uint32_t key, const RowId& row_id) {
+std::optional<RowId> BPlusTree::insert_into_leaf(std::uint32_t leaf_page_id, IndexKey key, const RowId& row_id) {
     Page* leaf_page_ptr = page_cache_manager_.fetch_page(leaf_page_id);
     if (leaf_page_ptr == nullptr) {
         return std::nullopt;
@@ -331,7 +331,7 @@ std::optional<RowId> BPlusTree::insert_into_leaf(std::uint32_t leaf_page_id, std
 
 std::optional<RowId> BPlusTree::create_new_root(
     std::uint32_t left_child_page_id,
-    std::uint32_t key,
+    IndexKey key,
     std::uint32_t right_child_page_id,
     const RowId& row_id
 ) {
@@ -389,7 +389,7 @@ std::optional<RowId> BPlusTree::create_new_root(
 std::optional<RowId> BPlusTree::insert_into_parent(
     std::uint32_t parent_page_id,
     std::uint32_t left_child_page_id,
-    std::uint32_t key,
+    IndexKey key,
     std::uint32_t right_child_page_id,
     const RowId& row_id
 ) {
@@ -458,7 +458,7 @@ std::optional<RowId> BPlusTree::insert_into_parent(
     );
 }
 
-std::optional<RowId> BPlusTree::split_leaf_and_insert(std::uint32_t leaf_page_id, std::uint32_t key, const RowId& row_id) {
+std::optional<RowId> BPlusTree::split_leaf_and_insert(std::uint32_t leaf_page_id, IndexKey key, const RowId& row_id) {
     Page* left_leaf_page_ptr = page_cache_manager_.fetch_page(leaf_page_id);
     if (left_leaf_page_ptr == nullptr) {
         return std::nullopt;
@@ -539,7 +539,7 @@ std::optional<RowId> BPlusTree::split_leaf_and_insert(std::uint32_t leaf_page_id
     right_leaf.set_next_leaf_page_id(old_next_leaf_page_id);
 
     // In a leaf split, the first key in the right leaf becomes the separator key.
-    const std::uint32_t promoted_key = all_entries[split_index].key;
+    const IndexKey promoted_key = all_entries[split_index].key;
 
     page_cache_manager_.unpin_page(leaf_page_id, true);
     page_cache_manager_.unpin_page(right_leaf_page_id, true);
@@ -556,7 +556,7 @@ std::optional<RowId> BPlusTree::split_leaf_and_insert(std::uint32_t leaf_page_id
 std::optional<BPlusTree::InternalInsertResult> BPlusTree::split_internal_and_insert(
     std::uint32_t internal_page_id,
     std::uint32_t left_child_page_id,
-    std::uint32_t key,
+    IndexKey key,
     std::uint32_t right_child_page_id
 ) {
     Page* left_internal_page_ptr = page_cache_manager_.fetch_page(internal_page_id);
@@ -639,7 +639,7 @@ std::optional<BPlusTree::InternalInsertResult> BPlusTree::split_internal_and_ins
 
     // The middle key is pushed up to the parent and removed from both children.
     const std::size_t promote_index = temp_node.keys.size() / 2;
-    const std::uint32_t promoted_key = temp_node.keys[promote_index];
+    const IndexKey promoted_key = temp_node.keys[promote_index];
 
     // The left split keeps every key strictly before the promoted separator.
     left_internal.set_leftmost_child_page_id(temp_node.child_page_ids[0]);
