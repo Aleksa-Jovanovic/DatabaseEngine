@@ -23,6 +23,8 @@ public:
 
     bool create_table(const TableDefinition& table_definition);
     bool drop_table(const std::string& table_name);
+    bool create_index(const IndexDefinition& index_definition);
+    bool drop_index(const std::string& index_name);
     bool has_table(const std::string& table_name) const;
     std::optional<TableDefinition> find_table_definition(const std::string& table_name) const;
 

@@ -109,6 +109,35 @@ int main() {
 
     {
         const std::vector<Token> tokens =
+            tokenizer.tokenize("CREATE INDEX users_age_idx ON users (age);");
+
+        assert(tokens.size() == 10);
+        assert_token(tokens[0], TokenType::Keyword, "CREATE");
+        assert_token(tokens[1], TokenType::Keyword, "INDEX");
+        assert_token(tokens[2], TokenType::Identifier, "users_age_idx");
+        assert_token(tokens[3], TokenType::Keyword, "ON");
+        assert_token(tokens[4], TokenType::Identifier, "users");
+        assert_token(tokens[5], TokenType::LeftParen, "(");
+        assert_token(tokens[6], TokenType::Identifier, "age");
+        assert_token(tokens[7], TokenType::RightParen, ")");
+        assert_token(tokens[8], TokenType::Semicolon, ";");
+        assert_token(tokens[9], TokenType::EndOfInput, "");
+    }
+
+    {
+        const std::vector<Token> tokens =
+            tokenizer.tokenize("DROP INDEX users_age_idx;");
+
+        assert(tokens.size() == 5);
+        assert_token(tokens[0], TokenType::Keyword, "DROP");
+        assert_token(tokens[1], TokenType::Keyword, "INDEX");
+        assert_token(tokens[2], TokenType::Identifier, "users_age_idx");
+        assert_token(tokens[3], TokenType::Semicolon, ";");
+        assert_token(tokens[4], TokenType::EndOfInput, "");
+    }
+
+    {
+        const std::vector<Token> tokens =
             tokenizer.tokenize("UPDATE users SET name = 'Alice', active = TRUE WHERE id <= 42;");
 
         assert(tokens.size() == 16);

@@ -41,6 +41,17 @@ SQL text
 -> heap/index file removal
 ```
 
+Index-management statements also delegate to the catalog:
+```text
+SQL text
+-> tokenizer/parser
+-> CreateIndexStatement or DropIndexStatement
+-> Executor
+-> Catalog create_index(...) or drop_index(...)
+-> catalog metadata update
+-> physical index file create/remove
+```
+
 ## Current executor design
 The current `Executor` lives in the execution layer rather than the SQL layer.
 
@@ -105,6 +116,31 @@ Current limitation:
 - if physical file removal succeeds but catalog persistence fails, the current
   implementation restores in-memory metadata but does not recreate deleted
   files
+
+## Current CREATE/DROP INDEX behavior
+The current executor supports first-pass SQL-driven secondary-index lifecycle
+operations.
+
+Supported forms:
+```sql
+CREATE INDEX users_age_idx ON users (age);
+DROP INDEX users_age_idx;
+```
+
+Current behavior:
+- delegates metadata changes to the catalog
+- creates a physical B+ tree file for a new secondary index
+- removes the physical B+ tree file when a secondary index is dropped
+- rejects dropping primary indexes through `DROP INDEX`
+- returns `affected_rows = 0` because this is DDL, not row-level DML
+
+Current limitation:
+- only non-primary integer columns can be indexed
+- current secondary indexes are effectively unique-only because the current
+  B+ tree rejects duplicate keys
+- secondary indexes are not yet maintained during `INSERT`, `UPDATE`, or
+  `DELETE`
+- execution still does not use secondary indexes for query planning
 
 ## Current SELECT behavior
 The current executor supports scan-based `SELECT`.
@@ -239,6 +275,18 @@ The current executor drop-table test verifies:
 - failed `SELECT` after drop
 - repeated drop failure
 
+The current executor index test verifies:
+- SQL-driven `CREATE INDEX`
+- SQL-driven `DROP INDEX`
+- metadata and physical file creation for secondary indexes
+- metadata and physical file removal for dropped secondary indexes
+- duplicate-index creation failure
+- string-column index rejection
+- primary-key secondary-index rejection
+- missing-table index creation failure
+- primary-index drop rejection
+- repeated secondary-index drop failure
+
 The current executor test verifies:
 - executing `SELECT *`
 - executing projected `SELECT`
@@ -285,4 +333,5 @@ Good next execution milestones:
 - introduce a query-result row type that is separate from storage/table rows
 - add basic planner structure
 - add index-scan execution for primary-key predicates
-- add SQL support for secondary-index creation
+- maintain secondary indexes during insert, update, and delete
+- add SQL support for unique/non-unique index distinction

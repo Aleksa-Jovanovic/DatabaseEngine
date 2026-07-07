@@ -156,12 +156,14 @@ The current executor supports scan-based `SELECT`, explicit projection,
 comparison filtering, `BETWEEN`, and logical `AND`/`OR` filtering with
 parser-provided SQL precedence. It also supports SQL-driven `CREATE TABLE`
 with `PRIMARY KEY` and `AUTOINCREMENT` column metadata, SQL-driven
-`DROP TABLE` with catalog and physical-file cleanup, `INSERT` execution with
-schema-order values, named columns, simple defaults for omitted non-primary
-columns, and live auto-increment for omitted auto-increment primary keys.
-Execution is still scan-based, now supports `UPDATE` for non-primary-key
+`DROP TABLE` with catalog and physical-file cleanup, first-pass SQL-driven
+`CREATE INDEX` and `DROP INDEX` for unique integer secondary indexes, `INSERT`
+execution with schema-order values, named columns, simple defaults for omitted
+non-primary columns, and live auto-increment for omitted auto-increment primary
+keys. Execution is still scan-based, now supports `UPDATE` for non-primary-key
 assignments with affected-row counts, and now supports scan-based `DELETE`
-with affected-row counts. Index scans are still pending.
+with affected-row counts. Index scans and secondary-index write maintenance
+are still pending.
 
 ## Phase 10 - Transactions and recovery
 - transactions

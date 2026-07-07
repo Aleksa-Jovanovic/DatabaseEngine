@@ -2,12 +2,14 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <memory>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "catalog/catalog_serializer.h"
+#include "index/bplustree.h"
 
 namespace db::catalog {
 
@@ -58,6 +60,42 @@ bool remove_table_files(const TableDefinition& table_definition) {
     }
 
     return true;
+}
+
+bool column_exists_with_type(
+    const TableDefinition& table_definition,
+    const std::string& column_name,
+    ColumnType expected_type,
+    bool allow_primary_key
+) {
+    for (const ColumnDefinition& column : table_definition.schema.columns()) {
+        if (column.name != column_name) {
+            continue;
+        }
+
+        if (!allow_primary_key && column.is_primary_key) {
+            return false;
+        }
+
+        return column.type == expected_type;
+    }
+
+    return false;
+}
+
+bool catalog_has_index_name(
+    const CatalogMetadata& metadata,
+    const std::string& index_name
+) {
+    for (const TableDefinition& table_definition : metadata.tables) {
+        for (const IndexDefinition& index_definition : table_definition.indexes) {
+            if (index_definition.index_name == index_name) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 }  // namespace
@@ -125,6 +163,96 @@ bool Catalog::drop_table(const std::string& table_name) {
         }
 
         return true;
+    }
+
+    return false;
+}
+
+bool Catalog::create_index(const IndexDefinition& index_definition) {
+    if (index_definition.index_name.empty() ||
+        index_definition.table_name.empty() ||
+        index_definition.column_name.empty() ||
+        index_definition.file_name.empty()) {
+        return false;
+    }
+
+    if (index_definition.is_primary) {
+        return false;
+    }
+
+    if (catalog_has_index_name(metadata_, index_definition.index_name)) {
+        return false;
+    }
+
+    for (TableDefinition& table_definition : metadata_.tables) {
+        if (table_definition.table_name != index_definition.table_name) {
+            continue;
+        }
+
+        // First secondary-index version is constrained by the current B+ tree:
+        // unique uint32 keys only, so only non-primary integer columns qualify.
+        if (!column_exists_with_type(
+                table_definition,
+                index_definition.column_name,
+                ColumnType::Integer,
+                false
+            )) {
+            return false;
+        }
+
+        index::BPlusTree bootstrap_index(index_definition.file_name);
+
+        table_definition.indexes.push_back(index_definition);
+
+        if (!metadata_file_name_.empty() && !save_to_file()) {
+            table_definition.indexes.pop_back();
+            remove_file_if_exists(index_definition.file_name);
+            return false;
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
+bool Catalog::drop_index(const std::string& index_name) {
+    if (index_name.empty()) {
+        return false;
+    }
+
+    for (TableDefinition& table_definition : metadata_.tables) {
+        for (auto index_it = table_definition.indexes.begin();
+             index_it != table_definition.indexes.end();
+             ++index_it) {
+            if (index_it->index_name != index_name) {
+                continue;
+            }
+
+            if (index_it->is_primary) {
+                return false;
+            }
+
+            const IndexDefinition index_definition = *index_it;
+            const auto restore_position =
+                std::distance(table_definition.indexes.begin(), index_it);
+
+            if (!remove_file_if_exists(index_definition.file_name)) {
+                return false;
+            }
+
+            table_definition.indexes.erase(index_it);
+
+            if (!metadata_file_name_.empty() && !save_to_file()) {
+                table_definition.indexes.insert(
+                    table_definition.indexes.begin() + restore_position,
+                    index_definition
+                );
+                return false;
+            }
+
+            return true;
+        }
     }
 
     return false;

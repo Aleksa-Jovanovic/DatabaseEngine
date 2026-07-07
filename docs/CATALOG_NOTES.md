@@ -64,6 +64,8 @@ The current `Catalog` now supports both:
 Current public behavior:
 - create a table definition
 - drop a table definition
+- create a secondary index definition
+- drop a secondary index definition
 - check whether a table exists
 - find a table definition by name
 - open a runtime `Table` from catalog metadata
@@ -98,6 +100,18 @@ Current persistence behavior:
 - missing physical files are treated as acceptable during drop, but filesystem
   errors cause the drop to fail
 - `drop_table(...)` persists immediately for file-backed catalogs
+- `create_index(...)` adds a non-primary index definition to an existing table
+  and creates the physical B+ tree index file
+- `drop_index(...)` removes a non-primary index definition and deletes its
+  physical index file
+- primary indexes cannot be dropped through `drop_index(...)`
+
+Current secondary-index constraints:
+- only non-primary columns can be indexed through `create_index(...)`
+- only integer columns can be indexed through `create_index(...)`
+- index names must be unique across the catalog
+- current secondary indexes are treated as unique because the current B+ tree
+  rejects duplicate keys
 
 ## Current Table reconstruction flow
 The first important catalog-to-runtime bridge is now implemented.
@@ -151,6 +165,9 @@ The current catalog test verifies:
 - reopened catalog can still reconstruct and open a known table
 - table drop removes metadata plus heap/index files
 - repeated drop of the same table fails cleanly
+- secondary-index creation adds catalog metadata and creates an index file
+- secondary-index drop removes catalog metadata and deletes the index file
+- primary-index drop through the secondary-index path is rejected
 - duplicate column-name rejection
 - duplicate index-name rejection
 - non-integer primary-key rejection

@@ -29,6 +29,8 @@ private:
 
     ExecutionResult execute_create_table(const sql::CreateTableStatement& statement);
     ExecutionResult execute_drop_table(const sql::DropTableStatement& statement);
+    ExecutionResult execute_create_index(const sql::CreateIndexStatement& statement);
+    ExecutionResult execute_drop_index(const sql::DropIndexStatement& statement);
     ExecutionResult execute_select(const sql::SelectStatement& statement);
     ExecutionResult execute_insert(const sql::InsertStatement& statement);
     ExecutionResult execute_update(const sql::UpdateStatement& statement);

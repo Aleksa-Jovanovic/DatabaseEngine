@@ -52,6 +52,8 @@ The tokenizer currently:
 Current SQL keywords:
 - `CREATE`
 - `DROP`
+- `INDEX`
+- `ON`
 - `PRIMARY`
 - `KEY`
 - `AUTOINCREMENT`
@@ -100,7 +102,7 @@ indexes in the parser to make malformed input easier to debug.
 
 ## Current AST and parser model
 The SQL layer now has a first typed AST for `CREATE TABLE`, `DROP TABLE`,
-`INSERT`, `SELECT`, `DELETE`, and `UPDATE`.
+`CREATE INDEX`, `DROP INDEX`, `INSERT`, `SELECT`, `DELETE`, and `UPDATE`.
 
 Current AST pieces:
 - `SqlTypeName`
@@ -118,6 +120,12 @@ Current AST pieces:
   - column definitions
 - `DropTableStatement`
   - table name
+- `CreateIndexStatement`
+  - index name
+  - table name
+  - column name
+- `DropIndexStatement`
+  - index name
 - literal value nodes
   - integer literals
   - string literals
@@ -163,8 +171,8 @@ Current AST pieces:
   - assignment list
   - optional `WHERE` expression
 - `Statement`
-  - currently a variant over `CREATE TABLE`, `DROP TABLE`, `INSERT`,
-    `SELECT`, `DELETE`, and `UPDATE` statement nodes
+  - currently a variant over `CREATE TABLE`, `DROP TABLE`, `CREATE INDEX`,
+    `DROP INDEX`, `INSERT`, `SELECT`, `DELETE`, and `UPDATE` statement nodes
 
 Current parser behavior:
 - tokenizes the SQL input
@@ -174,6 +182,8 @@ Current parser behavior:
 - builds a typed `CreateTableStatement` AST node
 - recognizes `DROP TABLE ...` statements
 - builds a typed `DropTableStatement` AST node
+- recognizes `CREATE INDEX ... ON ... (...)` statements
+- recognizes `DROP INDEX ...` statements
 - recognizes `INSERT INTO ... VALUES (...)` statements
 - recognizes `INSERT INTO ... (column, column) VALUES (...)` statements
 - parses integer, string, boolean, and date literal values
@@ -192,6 +202,7 @@ Current parser behavior:
 The current SQL tokenizer test verifies:
 - tokenization of `CREATE TABLE` with `PRIMARY KEY AUTOINCREMENT`
 - tokenization of a basic `DROP TABLE` statement
+- tokenization of basic `CREATE INDEX` and `DROP INDEX` statements
 - tokenization of a basic `INSERT` statement
 - tokenization of a basic `SELECT` statement
 - tokenization of basic `DELETE` and `UPDATE` statements
@@ -205,6 +216,7 @@ The current SQL parser test verifies:
 - parsing `PRIMARY KEY` and `AUTOINCREMENT` column flags
 - parsing primary-key columns that are not the first column
 - parsing `DROP TABLE` statements into AST form
+- parsing `CREATE INDEX` and `DROP INDEX` statements into AST form
 - parsing `BOOLEAN` and `DATE` column types into `SqlTypeName`
 - parsing positional `INSERT` values into AST form
 - parsing named-column `INSERT` values into AST form
@@ -228,7 +240,7 @@ The current SQL parser test verifies:
 ## Current limitations
 - tokenizer only handles a small SQL subset
 - parser currently handles basic `CREATE TABLE`, `INSERT`, `SELECT`,
-  `DELETE`, `UPDATE`, and `DROP TABLE`
+  `DELETE`, `UPDATE`, `DROP TABLE`, `CREATE INDEX`, and `DROP INDEX`
 - AST currently models the basic CRUD SQL surface needed by the next phase
 - `CREATE TABLE` supports inline column-level `PRIMARY KEY` and
   `AUTOINCREMENT`, but not table-level constraints yet
@@ -252,6 +264,7 @@ The SQL layer now has:
 - a typed AST for the current CRUD SQL subset
 - parser support for `CREATE TABLE`
 - parser support for `DROP TABLE`
+- parser support for `CREATE INDEX` and `DROP INDEX`
 - parser support for `INSERT`
 - parser support for `SELECT`
 - parser support for `DELETE`
@@ -261,5 +274,5 @@ The SQL layer now has:
 
 The next natural parser-side steps are:
 - later extend SQL syntax with parenthesized boolean expressions if needed
-- later add SQL syntax for secondary index creation
+- later extend index syntax with uniqueness and richer index options
 - later add richer DDL such as `ALTER TABLE`

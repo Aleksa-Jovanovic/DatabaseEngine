@@ -699,6 +699,13 @@ std::string primary_index_name_for_table(const std::string& table_name) {
     return table_name + "_pkey";
 }
 
+std::string secondary_index_file_name_for_index(
+    const std::string& table_name,
+    const std::string& index_name
+) {
+    return table_name + "_" + index_name + ".db";
+}
+
 std::optional<sql::ColumnDefinitionNode> find_primary_key_column(
     const sql::CreateTableStatement& create_table_statement
 ) {
@@ -772,6 +779,14 @@ ExecutionResult Executor::execute(const sql::Statement& statement) {
 
     if (std::holds_alternative<sql::DropTableStatement>(statement)) {
         return execute_drop_table(std::get<sql::DropTableStatement>(statement));
+    }
+
+    if (std::holds_alternative<sql::CreateIndexStatement>(statement)) {
+        return execute_create_index(std::get<sql::CreateIndexStatement>(statement));
+    }
+
+    if (std::holds_alternative<sql::DropIndexStatement>(statement)) {
+        return execute_drop_index(std::get<sql::DropIndexStatement>(statement));
     }
 
     return ExecutionResult{
@@ -1143,6 +1158,70 @@ ExecutionResult Executor::execute_drop_table(
         return ExecutionResult{
             false,
             "DROP TABLE failed: " + drop_table_statement.table_name,
+            {},
+            {},
+            0
+        };
+    }
+
+    return ExecutionResult{true, "", {}, {}, 0};
+}
+
+ExecutionResult Executor::execute_create_index(
+    const sql::CreateIndexStatement& create_index_statement
+) {
+    if (create_index_statement.index_name.empty() ||
+        create_index_statement.table_name.empty() ||
+        create_index_statement.column_name.empty()) {
+        return ExecutionResult{false, "CREATE INDEX contains an empty identifier", {}, {}, 0};
+    }
+
+    if (!catalog_.has_table(create_index_statement.table_name)) {
+        return ExecutionResult{
+            false,
+            "Table does not exist: " + create_index_statement.table_name,
+            {},
+            {},
+            0
+        };
+    }
+
+    const catalog::IndexDefinition index_definition{
+        create_index_statement.index_name,
+        create_index_statement.table_name,
+        create_index_statement.column_name,
+        secondary_index_file_name_for_index(
+            create_index_statement.table_name,
+            create_index_statement.index_name
+        ),
+        false,
+        true
+    };
+
+    if (!catalog_.create_index(index_definition)) {
+        return ExecutionResult{
+            false,
+            "CREATE INDEX failed: " + create_index_statement.index_name,
+            {},
+            {},
+            0
+        };
+    }
+
+    return ExecutionResult{true, "", {}, {}, 0};
+}
+
+ExecutionResult Executor::execute_drop_index(
+    const sql::DropIndexStatement& drop_index_statement
+) {
+    if (drop_index_statement.index_name.empty()) {
+        return ExecutionResult{false, "Index name cannot be empty", {}, {}, 0};
+    }
+
+    if (!catalog_.drop_index(drop_index_statement.index_name)) {
+        return ExecutionResult{
+            false,
+            "DROP INDEX failed: " + drop_index_statement.index_name,
             {},
             {},
             0

@@ -233,6 +233,106 @@ int main() {
         assert(reopened_table != nullptr);
     }
 
+    // Secondary index lifecycle: create/drop metadata and physical index file.
+    {
+        const std::string index_heap_file_name = "catalog_index_users_heap.db";
+        const std::string index_primary_file_name =
+            "catalog_index_users_primary_index.db";
+        const std::string age_index_file_name = "catalog_index_users_age_idx.db";
+
+        std::filesystem::remove(index_heap_file_name);
+        std::filesystem::remove(index_primary_file_name);
+        std::filesystem::remove(age_index_file_name);
+
+        db::catalog::Catalog index_catalog;
+        db::catalog::Schema index_schema;
+        index_schema.add_column({"id", db::catalog::ColumnType::Integer, true, true});
+        index_schema.add_column({"age", db::catalog::ColumnType::Integer, false});
+        index_schema.add_column({"name", db::catalog::ColumnType::String, false});
+
+        db::catalog::TableDefinition index_table{
+            "catalog_index_users",
+            index_schema,
+            index_heap_file_name,
+            {
+                {
+                    "catalog_index_users_pkey",
+                    "catalog_index_users",
+                    "id",
+                    index_primary_file_name,
+                    true,
+                    true
+                }
+            }
+        };
+
+        assert(index_catalog.create_table(index_table));
+
+        assert(index_catalog.create_index({
+            "catalog_index_users_age_idx",
+            "catalog_index_users",
+            "age",
+            age_index_file_name,
+            false,
+            true
+        }));
+
+        assert(std::filesystem::exists(age_index_file_name));
+
+        const auto with_index =
+            index_catalog.find_table_definition("catalog_index_users");
+        assert(with_index.has_value());
+        assert(with_index->indexes.size() == 2);
+        assert(with_index->indexes[1].index_name == "catalog_index_users_age_idx");
+        assert(with_index->indexes[1].column_name == "age");
+        assert(!with_index->indexes[1].is_primary);
+
+        assert(!index_catalog.create_index({
+            "catalog_index_users_age_idx",
+            "catalog_index_users",
+            "age",
+            age_index_file_name,
+            false,
+            true
+        }));
+
+        assert(!index_catalog.create_index({
+            "catalog_index_users_name_idx",
+            "catalog_index_users",
+            "name",
+            "catalog_index_users_name_idx.db",
+            false,
+            true
+        }));
+
+        assert(!index_catalog.create_index({
+            "catalog_index_users_id_idx",
+            "catalog_index_users",
+            "id",
+            "catalog_index_users_id_idx.db",
+            false,
+            true
+        }));
+
+        assert(!index_catalog.drop_index("catalog_index_users_pkey"));
+
+        assert(index_catalog.drop_index("catalog_index_users_age_idx"));
+        assert(!std::filesystem::exists(age_index_file_name));
+
+        const auto without_index =
+            index_catalog.find_table_definition("catalog_index_users");
+        assert(without_index.has_value());
+        assert(without_index->indexes.size() == 1);
+
+        assert(!index_catalog.drop_index("catalog_index_users_age_idx"));
+
+        std::filesystem::remove(index_heap_file_name);
+        std::filesystem::remove(index_primary_file_name);
+        std::filesystem::remove(age_index_file_name);
+        std::filesystem::remove("catalog_index_users_name_idx.db");
+        std::filesystem::remove("catalog_index_users_id_idx.db");
+    }
+
     // Validation: duplicate column names should be rejected.
     {
         db::catalog::Catalog duplicate_column_catalog;

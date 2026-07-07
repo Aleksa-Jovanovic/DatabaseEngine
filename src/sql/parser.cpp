@@ -69,12 +69,24 @@ Statement Parser::parse(const std::string& sql) const {
         throw SqlParseError("SQL input produced no tokens");
     }
 
-    if (matches(tokens, 0, TokenType::Keyword, "CREATE")) {
+    if (matches(tokens, 0, TokenType::Keyword, "CREATE") &&
+        matches(tokens, 1, TokenType::Keyword, "TABLE")) {
         return parse_create_table(tokens);
     }
 
-    if (matches(tokens, 0, TokenType::Keyword, "DROP")) {
+    if (matches(tokens, 0, TokenType::Keyword, "CREATE") &&
+        matches(tokens, 1, TokenType::Keyword, "INDEX")) {
+        return parse_create_index(tokens);
+    }
+
+    if (matches(tokens, 0, TokenType::Keyword, "DROP") &&
+        matches(tokens, 1, TokenType::Keyword, "TABLE")) {
         return parse_drop_table(tokens);
+    }
+
+    if (matches(tokens, 0, TokenType::Keyword, "DROP") &&
+        matches(tokens, 1, TokenType::Keyword, "INDEX")) {
+        return parse_drop_index(tokens);
     }
 
     if (matches(tokens, 0, TokenType::Keyword, "INSERT")) {
@@ -394,6 +406,49 @@ DropTableStatement Parser::parse_drop_table(const std::vector<Token>& tokens) {
 
     return DropTableStatement{
         table_name.lexeme
+    };
+}
+
+CreateIndexStatement Parser::parse_create_index(const std::vector<Token>& tokens) {
+    std::size_t index = 0;
+
+    expect(tokens, index++, TokenType::Keyword, "CREATE");
+    expect(tokens, index++, TokenType::Keyword, "INDEX");
+
+    const Token& index_name = expect(tokens, index++, TokenType::Identifier);
+
+    expect(tokens, index++, TokenType::Keyword, "ON");
+
+    const Token& table_name = expect(tokens, index++, TokenType::Identifier);
+
+    expect(tokens, index++, TokenType::LeftParen);
+
+    const Token& column_name = expect(tokens, index++, TokenType::Identifier);
+
+    expect(tokens, index++, TokenType::RightParen);
+    expect(tokens, index++, TokenType::Semicolon);
+    expect(tokens, index++, TokenType::EndOfInput);
+
+    return CreateIndexStatement{
+        index_name.lexeme,
+        table_name.lexeme,
+        column_name.lexeme
+    };
+}
+
+DropIndexStatement Parser::parse_drop_index(const std::vector<Token>& tokens) {
+    std::size_t index = 0;
+
+    expect(tokens, index++, TokenType::Keyword, "DROP");
+    expect(tokens, index++, TokenType::Keyword, "INDEX");
+
+    const Token& index_name = expect(tokens, index++, TokenType::Identifier);
+
+    expect(tokens, index++, TokenType::Semicolon);
+    expect(tokens, index++, TokenType::EndOfInput);
+
+    return DropIndexStatement{
+        index_name.lexeme
     };
 }
 

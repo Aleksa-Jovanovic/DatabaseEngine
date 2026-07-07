@@ -205,6 +205,8 @@ Current limitation:
   still future-facing until broader index-key support exists
 - the current uniqueness flag is still constrained by the existing B+ tree,
   which currently rejects duplicate keys
+- SQL/catalog index management currently limits secondary indexes to
+  non-primary integer columns for that reason
 
 ## Current test coverage
 The current table integration test verifies:
@@ -263,6 +265,8 @@ For the current project scope, Phase 6 now has:
 - same-key update behavior with index repair on row relocation
 - primary-key delete behavior
 - first secondary-index metadata and registration scaffolding
+- SQL/catalog secondary-index lifecycle exists, but table write maintenance for
+  those indexes is still future work
 
 That is a good stopping point before moving into catalog/schema persistence in
 Phase 7.

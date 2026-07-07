@@ -498,7 +498,8 @@ int main() {
         } catch (const db::sql::SqlParseError& ex) {
             threw = true;
             assert(std::string(ex.what()).find("Unexpected token type") != std::string::npos ||
-                   std::string(ex.what()).find("Unexpected token lexeme") != std::string::npos);
+                   std::string(ex.what()).find("Unexpected token lexeme") != std::string::npos ||
+                   std::string(ex.what()).find("Unsupported SQL statement") != std::string::npos);
         }
 
         assert(threw);
@@ -520,6 +521,46 @@ int main() {
         bool threw = false;
         try {
             parser.parse("DROP users;");
+        } catch (const db::sql::SqlParseError& ex) {
+            threw = true;
+            assert(std::string(ex.what()).find("Unexpected token type") != std::string::npos ||
+                   std::string(ex.what()).find("Unexpected token lexeme") != std::string::npos ||
+                   std::string(ex.what()).find("Unsupported SQL statement") != std::string::npos);
+        }
+
+        assert(threw);
+    }
+
+    {
+        const db::sql::Statement statement =
+            parser.parse("CREATE INDEX users_age_idx ON users (age);");
+
+        assert(std::holds_alternative<db::sql::CreateIndexStatement>(statement));
+
+        const auto& create_index =
+            std::get<db::sql::CreateIndexStatement>(statement);
+
+        assert(create_index.index_name == "users_age_idx");
+        assert(create_index.table_name == "users");
+        assert(create_index.column_name == "age");
+    }
+
+    {
+        const db::sql::Statement statement =
+            parser.parse("DROP INDEX users_age_idx;");
+
+        assert(std::holds_alternative<db::sql::DropIndexStatement>(statement));
+
+        const auto& drop_index =
+            std::get<db::sql::DropIndexStatement>(statement);
+
+        assert(drop_index.index_name == "users_age_idx");
+    }
+
+    {
+        bool threw = false;
+        try {
+            parser.parse("CREATE INDEX users_age_idx users (age);");
         } catch (const db::sql::SqlParseError& ex) {
             threw = true;
             assert(std::string(ex.what()).find("Unexpected token type") != std::string::npos ||
