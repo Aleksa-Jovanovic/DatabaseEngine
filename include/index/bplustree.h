@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "common/row_id.h"
 #include "index/bplustree_page.h"
@@ -18,6 +19,7 @@ public:
     BPlusTree(const std::string& file_name, std::size_t cache_size = 8);
 
     std::optional<RowId> search(IndexKey key);
+    std::vector<RowId> range_scan(IndexKey start_key, IndexKey end_key);
     std::optional<RowId> insert(IndexKey key, const RowId& row_id);
     std::optional<RowId> update(IndexKey key, const RowId& row_id);
     std::optional<RowId> delete_key(IndexKey key);

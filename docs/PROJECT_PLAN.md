@@ -72,7 +72,9 @@ internal-page routing and child-relative insert behavior, and top-level B+
 tree search plus insert support for an empty tree, a single leaf root, the
 first root-leaf split into a new internal root, non-root leaf splits,
 internal split propagation, and creation of a taller tree after an
-internal-root split, all with dedicated tests or notes coverage.
+internal-root split. The B+ tree also now has leaf-entry delete support and a
+`range_scan(...)` API that walks linked leaves for ordered key ranges, all with
+dedicated tests or notes coverage.
 
 ## Phase 6 - Table abstraction
 - table metadata

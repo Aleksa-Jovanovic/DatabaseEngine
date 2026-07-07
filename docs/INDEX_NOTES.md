@@ -367,13 +367,26 @@ The current insert path now works for:
 - creating a taller tree after an internal-root split
 
 Current simplifications:
-- fixed-size `uint32_t` keys
+- fixed-width `IndexKey` keys
 - duplicate-key rejection
 - page `0` is dedicated to index metadata in the current file format
 - delete removes entries from leaf pages but does not rebalance the tree yet
 - no concurrency control
 - no WAL or recovery interaction
-- no range-scan API yet, although leaf pages are already linked for it
+
+## Current range-scan boundary
+The current B+ tree now supports `range_scan(start_key, end_key)`.
+
+Current behavior:
+- returns an empty result when the tree is empty
+- returns an empty result when `start_key > end_key`
+- finds the first leaf where `start_key` belongs
+- scans matching leaf entries in key order
+- follows `next_leaf_page_id` across linked leaves
+- stops once a key greater than `end_key` is reached
+
+This exposes the index-level primitive needed for later primary and secondary
+index scans in the execution layer.
 
 ## Current delete boundary
 The current B+ tree has a first point-delete path for primary-key index usage.
@@ -435,3 +448,5 @@ The current index page tests verify:
 - leaf-level B+ tree delete
 - delete of keys from a split tree without breaking neighboring lookups
 - reopened-tree lookup after deleted keys were removed
+- range scan on empty trees, invalid ranges, single-leaf ranges, multi-leaf
+  ranges, no-match ranges, and reopened trees
