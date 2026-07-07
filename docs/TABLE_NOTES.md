@@ -204,6 +204,14 @@ Current `add_secondary_index(...)` behavior:
 - stores runtime secondary-index information in the table object
 - stores matching `IndexMetadata` entries in `TableMetadata`
 
+Current `backfill_secondary_index(...)` behavior:
+- locates a registered secondary index by name
+- scans existing heap records together with their `RowId`s
+- encodes each row's secondary key for the indexed integer column
+- inserts `encoded secondary key -> RowId` entries into the B+ tree
+- rolls back entries inserted during the same backfill attempt if a later row
+  fails
+
 Current secondary-index key model:
 - primary index keys are explicitly encoded with `encode_primary_key(...)`
 - integer secondary index keys are encoded as `(indexed_value, primary_key)`
@@ -217,13 +225,13 @@ Current metadata-load behavior:
   stays one-to-one by name
 
 Current limitation:
-- secondary-index registration does not yet backfill existing rows
 - arbitrary column names can already appear in metadata, but that metadata is
   still future-facing until broader index-key support exists
 - SQL/catalog index management currently limits secondary indexes to
   non-primary integer columns
 - secondary indexes are maintained on new inserts, same-primary-key updates,
   and deletes after the index exists
+- SQL `CREATE INDEX` backfills rows that existed before the index was created
 - secondary-index maintenance is not yet transactional or rollback-safe across
   every partial-failure scenario
 
@@ -272,7 +280,6 @@ into separate configuration fields.
 - auto-increment metadata is persisted through catalog definitions
 - auto-increment counter state is rebuilt from table rows on open instead of
   persisted as a stored sequence value
-- no secondary-index backfill for rows that existed before index creation yet
 - secondary-index maintenance is not transactional or rollback-safe yet
 - delete does not rebalance the B+ tree yet
 - delete is not transactional or rollback-safe yet

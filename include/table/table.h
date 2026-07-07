@@ -39,6 +39,8 @@ public:
         const std::string& index_file_name
     );
 
+    bool backfill_secondary_index(const std::string& index_name);
+
 private:
     struct SecondaryIndexInfo {
         std::string index_name;
@@ -53,6 +55,8 @@ private:
     index::BPlusTree primary_index_;
     std::unordered_map<std::string, SecondaryIndexInfo> secondary_indexes_;
     std::uint32_t next_primary_key_value_ = 1;
+
+    std::vector<std::pair<RowId, Row>> scan_with_row_ids();
 
     void load_secondary_indexes_from_metadata();
     bool validate_row(const Row& row) const;

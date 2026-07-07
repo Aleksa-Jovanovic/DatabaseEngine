@@ -130,16 +130,16 @@ DROP INDEX users_age_idx;
 Current behavior:
 - delegates metadata changes to the catalog
 - creates a physical B+ tree file for a new secondary index
+- opens the table after `CREATE INDEX` and backfills existing rows into the new
+  secondary index
 - removes the physical B+ tree file when a secondary index is dropped
 - rejects dropping primary indexes through `DROP INDEX`
 - returns `affected_rows = 0` because this is DDL, not row-level DML
 
 Current limitation:
 - only non-primary integer columns can be indexed
-- current secondary indexes are effectively unique-only because the current
-  B+ tree rejects duplicate keys
-- secondary indexes are not yet maintained during `INSERT`, `UPDATE`, or
-  `DELETE`
+- duplicate indexed integer values are supported through encoded
+  `(indexed_value, primary_key)` B+ tree keys
 - execution still does not use secondary indexes for query planning
 
 ## Current SELECT behavior
@@ -244,7 +244,6 @@ each full row, and calls `Table::delete_by_key(...)` for every matching row.
 
 Current limitation:
 - delete execution is scan-based and does not use index scans yet
-- table-level delete currently maintains the primary index only
 - the B+ tree delete path removes leaf entries but does not rebalance yet
 
 ## Current limitations
@@ -279,6 +278,7 @@ The current executor index test verifies:
 - SQL-driven `CREATE INDEX`
 - SQL-driven `DROP INDEX`
 - metadata and physical file creation for secondary indexes
+- backfilling existing rows into a secondary index during `CREATE INDEX`
 - metadata and physical file removal for dropped secondary indexes
 - duplicate-index creation failure
 - string-column index rejection

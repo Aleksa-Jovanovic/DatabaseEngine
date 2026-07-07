@@ -189,8 +189,8 @@ bool Catalog::create_index(const IndexDefinition& index_definition) {
             continue;
         }
 
-        // First secondary-index version is constrained by the current B+ tree:
-        // unique uint32 keys only, so only non-primary integer columns qualify.
+        // Secondary indexes currently support integer columns only. Duplicate indexed
+        // values are handled by encoding (indexed_value, primary_key) into the B+ tree key.
         if (!column_exists_with_type(
                 table_definition,
                 index_definition.column_name,

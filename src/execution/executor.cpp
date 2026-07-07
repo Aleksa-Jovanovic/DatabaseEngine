@@ -1208,6 +1208,17 @@ ExecutionResult Executor::execute_create_index(
         };
     }
 
+    auto table = catalog_.open_table(create_index_statement.table_name);
+    if (table == nullptr) {
+        catalog_.drop_index(create_index_statement.index_name);
+        return ExecutionResult{false, "Failed to open table for index backfill", {}, {}, 0};
+    }
+
+    if (!table->backfill_secondary_index(create_index_statement.index_name)) {
+        catalog_.drop_index(create_index_statement.index_name);
+        return ExecutionResult{false, "Failed to backfill secondary index", {}, {}, 0};
+    }
+
     return ExecutionResult{true, "", {}, {}, 0};
 }
 

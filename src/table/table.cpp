@@ -273,6 +273,78 @@ bool Table::add_secondary_index(
     return true;
 }
 
+bool Table::backfill_secondary_index(const std::string& index_name) {
+    auto index_it = secondary_indexes_.find(index_name);
+    if (index_it == secondary_indexes_.end()) {
+        return false;
+    }
+
+    SecondaryIndexInfo& index_info = index_it->second;
+    const auto rows = scan_with_row_ids();
+
+    std::vector<index::IndexKey> inserted_keys;
+
+    for (const auto& row_entry : rows) {
+        const RowId& row_id = row_entry.first;
+        const Row& row = row_entry.second;
+
+        const auto encoded_key = encode_secondary_key_for_row(
+            row,
+            index_info.column_name
+        );
+
+        if (!encoded_key.has_value()) {
+            for (const auto& inserted_key : inserted_keys) {
+                index_info.tree->delete_key(inserted_key);
+            }
+
+            return false;
+        }
+
+        const auto inserted_entry = index_info.tree->insert(
+            encoded_key.value(),
+            row_id
+        );
+
+        if (!inserted_entry.has_value()) {
+            for (const auto& inserted_key : inserted_keys) {
+                index_info.tree->delete_key(inserted_key);
+            }
+
+            return false;
+        }
+
+        inserted_keys.push_back(encoded_key.value());
+    }
+
+    return true;
+}
+
+std::vector<std::pair<RowId, Row>> Table::scan_with_row_ids() {
+    std::vector<std::pair<RowId, Row>> rows;
+
+    const auto records = heap_file_.scan_var_records();
+
+    for (const auto& record_entry : records) {
+        const RowId& row_id = record_entry.first;
+        const auto& record = record_entry.second;
+
+        auto row = RowSerializer::deserialize(
+            record.key,
+            record.value.data(),
+            record.value.size()
+        );
+
+        if (!row.has_value()) {
+            continue;
+        }
+
+        rows.push_back({row_id, row.value()});
+    }
+
+    return rows;
+}
+
 void Table::load_secondary_indexes_from_metadata() {
     secondary_indexes_.clear();
 

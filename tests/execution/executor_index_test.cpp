@@ -5,7 +5,23 @@
 
 #include "catalog/catalog.h"
 #include "execution/executor.h"
+#include "index/bplustree.h"
+#include "index/index_key.h"
 #include "sql/parser.h"
+
+namespace {
+
+db::index::IndexKey require_secondary_key(
+    std::int64_t indexed_value,
+    std::uint32_t primary_key
+) {
+    const auto encoded_key =
+        db::index::encode_secondary_integer_key(indexed_value, primary_key);
+    assert(encoded_key.has_value());
+    return encoded_key.value();
+}
+
+}  // namespace
 
 int main() {
     const std::string heap_file_name = "users_heap.db";
@@ -39,6 +55,22 @@ int main() {
     }
 
     {
+        const db::execution::ExecutionResult insert_alice_result = executor.execute(
+            parser.parse("INSERT INTO users (age, name) VALUES (30, 'Alice');")
+        );
+        const db::execution::ExecutionResult insert_bob_result = executor.execute(
+            parser.parse("INSERT INTO users (age, name) VALUES (30, 'Bob');")
+        );
+        const db::execution::ExecutionResult insert_carol_result = executor.execute(
+            parser.parse("INSERT INTO users (age, name) VALUES (40, 'Carol');")
+        );
+
+        assert(insert_alice_result.success);
+        assert(insert_bob_result.success);
+        assert(insert_carol_result.success);
+    }
+
+    {
         const db::execution::ExecutionResult create_index_result = executor.execute(
             parser.parse("CREATE INDEX users_age_idx ON users (age);")
         );
@@ -56,6 +88,14 @@ int main() {
         assert(table_definition->indexes[1].file_name == age_index_file_name);
         assert(!table_definition->indexes[1].is_primary);
         assert(table_definition->indexes[1].is_unique);
+    }
+
+    {
+        db::index::BPlusTree age_index(age_index_file_name, 8);
+
+        assert(age_index.search(require_secondary_key(30, 1)).has_value());
+        assert(age_index.search(require_secondary_key(30, 2)).has_value());
+        assert(age_index.search(require_secondary_key(40, 3)).has_value());
     }
 
     {
