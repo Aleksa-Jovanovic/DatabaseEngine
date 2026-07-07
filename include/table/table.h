@@ -27,7 +27,10 @@ public:
 
     std::optional<RowId> insert(const Row& row);
     std::optional<Row> get_by_key(std::uint32_t key);
+    std::vector<Row> get_by_secondary_integer_index(const std::string& index_name, std::int64_t key);
     std::vector<Row> scan();
+    std::vector<Row> scan_by_primary_key_range(std::uint32_t start_key, std::uint32_t end_key);
+    std::vector<Row> scan_by_secondary_integer_index_range(const std::string& index_name, std::int64_t start_value, std::int64_t end_value);
     bool update_by_key(std::uint32_t key, const Row& updated_row);
     bool delete_by_key(std::uint32_t key);
 
@@ -57,9 +60,11 @@ private:
     std::uint32_t next_primary_key_value_ = 1;
 
     std::vector<std::pair<RowId, Row>> scan_with_row_ids();
+    std::optional<Row> get_row_by_row_id(const RowId& row_id);
 
     void load_secondary_indexes_from_metadata();
     bool validate_row(const Row& row) const;
+
     void initialize_next_primary_key_value();
     void advance_next_primary_key_value(std::uint32_t key);
 

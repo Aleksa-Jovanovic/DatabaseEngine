@@ -221,6 +221,40 @@ The current page cache exposes a small test-only helper:
 - no explicit checkpointing policy yet
 - no clock policy or more advanced replacement tuning yet
 
+### Current per-file cache ownership
+The current storage objects do not share one global buffer pool yet.
+
+Current ownership model:
+- each `HeapFile` owns its own `PageCacheManager`
+- each primary `BPlusTree` owns its own `PageCacheManager`
+- each secondary `BPlusTree` owns its own `PageCacheManager`
+- each `PageCacheManager` owns its own file-specific `DiskManager`
+
+This means a table with one heap file, one primary index file, and one
+secondary index file currently has three separate page caches and three
+separate disk managers.
+
+Page ids are local to each physical file:
+- `users_heap.db` can have page `1`
+- `users_primary_index.db` can also have page `1`
+- those are different pages because they belong to different files
+
+B+ tree files reserve page `0` for B+ tree metadata such as the root page id.
+Heap files currently use page `0` as a normal heap data page.
+
+This per-file design is simple and works well for the current project stage,
+but it is not the ideal architecture for a mature database engine. A more
+database-style design would group page caching behind a shared buffer-pool or
+storage-manager layer. In that design, heap files and index files would share
+one cache, and pages would be identified by something like `(file_id, page_id)`
+instead of only a local `page_id`.
+
+Future benefits of a shared buffer pool:
+- one global memory budget across heap and index pages
+- one replacement policy across all table/index files
+- fewer visibility issues when two objects access the same file
+- a cleaner foundation for checkpointing, WAL, and recovery
+
 ### Current durability limitation
 The current page cache uses write-back behavior, not crash-safe durability.
 

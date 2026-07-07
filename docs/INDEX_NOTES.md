@@ -68,6 +68,14 @@ Integer secondary indexes encode `(indexed_value, primary_key)` into one
 `IndexKey`. This allows duplicate indexed values while keeping every concrete
 B+ tree key unique.
 
+Important current limitation:
+- the current secondary integer-key encoding packs the indexed value into the
+  high 32 bits and the primary key into the low 32 bits
+- because of that, indexed secondary values must currently be non-negative and
+  fit into `uint32_t`
+- signed integer values, full-width `int64_t` values, and string values require
+  a future encoding/comparison design before they can be indexed correctly
+
 ## B+ tree pages vs storage pages
 A B+ tree page is different from the slotted heap pages already implemented in
 the storage layer.

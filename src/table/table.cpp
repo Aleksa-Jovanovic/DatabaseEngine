@@ -4,6 +4,7 @@
 #include "table/row_serializer.h"
 
 #include <algorithm>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -87,6 +88,48 @@ std::optional<Row> Table::get_by_key(std::uint32_t key) {
     );
 }
 
+std::vector<Row> Table::get_by_secondary_integer_index(
+    const std::string& index_name,
+    std::int64_t key
+) {
+    std::vector<Row> rows;
+
+    auto index_it = secondary_indexes_.find(index_name);
+    if (index_it == secondary_indexes_.end()) {
+        return rows;
+    }
+
+    const auto start_key = index::encode_secondary_integer_key(
+        key,
+        std::numeric_limits<std::uint32_t>::min()
+    );
+
+    const auto end_key = index::encode_secondary_integer_key(
+        key,
+        std::numeric_limits<std::uint32_t>::max()
+    );
+
+    if (!start_key.has_value() || !end_key.has_value()) {
+        return rows;
+    }
+
+    const auto row_ids = index_it->second.tree->range_scan(
+        start_key.value(),
+        end_key.value()
+    );
+
+    for (const RowId& row_id : row_ids) {
+        auto row = get_row_by_row_id(row_id);
+        if (!row.has_value()) {
+            continue;
+        }
+
+        rows.push_back(row.value());
+    }
+
+    return rows;
+}
+
 std::vector<Row> Table::scan() {
     std::vector<Row> rows;
 
@@ -100,6 +143,71 @@ std::vector<Row> Table::scan() {
             record.value.size()
         );
 
+        if (!row.has_value()) {
+            continue;
+        }
+
+        rows.push_back(row.value());
+    }
+
+    return rows;
+}
+
+std::vector<Row> Table::scan_by_primary_key_range(
+    std::uint32_t start_key,
+    std::uint32_t end_key
+) {
+    std::vector<Row> rows;
+
+    const auto row_ids = primary_index_.range_scan(
+        index::encode_primary_key(start_key),
+        index::encode_primary_key(end_key)
+    );
+
+    for (const RowId& row_id : row_ids) {
+        auto row = get_row_by_row_id(row_id);
+        if (!row.has_value()) {
+            continue;
+        }
+
+        rows.push_back(row.value());
+    }
+
+    return rows;
+}
+
+std::vector<Row> Table::scan_by_secondary_integer_index_range(
+    const std::string& index_name,
+    std::int64_t start_value,
+    std::int64_t end_value
+) {
+    std::vector<Row> rows;
+
+    auto index_it = secondary_indexes_.find(index_name);
+    if (index_it == secondary_indexes_.end()) {
+        return rows;
+    }
+
+    const auto start_key = index::encode_secondary_integer_key(
+        start_value,
+        std::numeric_limits<std::uint32_t>::min()
+    );
+    const auto end_key = index::encode_secondary_integer_key(
+        end_value,
+        std::numeric_limits<std::uint32_t>::max()
+    );
+
+    if (!start_key.has_value() || !end_key.has_value()) {
+        return rows;
+    }
+
+    const auto row_ids = index_it->second.tree->range_scan(
+        start_key.value(),
+        end_key.value()
+    );
+
+    for (const RowId& row_id : row_ids) {
+        auto row = get_row_by_row_id(row_id);
         if (!row.has_value()) {
             continue;
         }
@@ -343,6 +451,19 @@ std::vector<std::pair<RowId, Row>> Table::scan_with_row_ids() {
     }
 
     return rows;
+}
+
+std::optional<Row> Table::get_row_by_row_id(const RowId& row_id) {
+    const auto record = heap_file_.get_var_record(row_id);
+    if (!record.has_value()) {
+        return std::nullopt;
+    }
+
+    return RowSerializer::deserialize(
+        record->key,
+        record->value.data(),
+        record->value.size()
+    );
 }
 
 void Table::load_secondary_indexes_from_metadata() {

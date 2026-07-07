@@ -218,6 +218,14 @@ Current secondary-index key model:
 - duplicate indexed values are supported because the primary key makes each
   encoded secondary key unique
 
+Important current limitation:
+- the current secondary integer-key encoding only supports indexed values that
+  are non-negative and fit into `uint32_t`
+- this means columns with negative values, such as temperature, cannot safely
+  use the current secondary-index encoding yet
+- supporting signed integer indexes requires a different order-preserving
+  encoding, such as biasing signed values before packing them into `IndexKey`
+
 Current metadata-load behavior:
 - reconstructs runtime secondary-index objects from `TableMetadata`
 - skips incomplete metadata entries with missing index names or file names
