@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <iostream>
 #include <string>
+#include <variant>
 
 #include "catalog/catalog.h"
 #include "execution/executor.h"
@@ -19,6 +20,33 @@ db::index::IndexKey require_secondary_key(
         db::index::encode_secondary_integer_key(indexed_value, primary_key);
     assert(encoded_key.has_value());
     return encoded_key.value();
+}
+
+const db::table::Row& require_row_by_key(
+    const std::vector<db::table::Row>& rows,
+    std::uint32_t key
+) {
+    for (const auto& row : rows) {
+        if (row.key == key) {
+            return row;
+        }
+    }
+
+    assert(false);
+    return rows[0];
+}
+
+void assert_user_row(
+    const db::table::Row& row,
+    std::uint32_t expected_key,
+    std::int64_t expected_age,
+    const std::string& expected_name
+) {
+    assert(row.key == expected_key);
+    assert(row.values.size() == 3);
+    assert(std::get<std::int64_t>(row.values[0]) == expected_key);
+    assert(std::get<std::int64_t>(row.values[1]) == expected_age);
+    assert(std::get<std::string>(row.values[2]) == expected_name);
 }
 
 }  // namespace
@@ -96,6 +124,186 @@ int main() {
         assert(age_index.search(require_secondary_key(30, 1)).has_value());
         assert(age_index.search(require_secondary_key(30, 2)).has_value());
         assert(age_index.search(require_secondary_key(40, 3)).has_value());
+    }
+
+    {
+        const db::execution::ExecutionResult primary_index_select_result = executor.execute(
+            parser.parse("SELECT * FROM users WHERE id = 2;")
+        );
+
+        assert(primary_index_select_result.success);
+        assert(primary_index_select_result.error_message.empty());
+        assert(primary_index_select_result.rows.size() == 1);
+        assert_user_row(
+            require_row_by_key(primary_index_select_result.rows, 2),
+            2,
+            30,
+            "Bob"
+        );
+    }
+
+    {
+        const db::execution::ExecutionResult secondary_index_select_result = executor.execute(
+            parser.parse("SELECT * FROM users WHERE age = 30;")
+        );
+
+        assert(secondary_index_select_result.success);
+        assert(secondary_index_select_result.error_message.empty());
+        assert(secondary_index_select_result.rows.size() == 2);
+        assert_user_row(
+            require_row_by_key(secondary_index_select_result.rows, 1),
+            1,
+            30,
+            "Alice"
+        );
+        assert_user_row(
+            require_row_by_key(secondary_index_select_result.rows, 2),
+            2,
+            30,
+            "Bob"
+        );
+    }
+
+    {
+        const db::execution::ExecutionResult and_primary_index_select_result = executor.execute(
+            parser.parse("SELECT * FROM users WHERE age = 30 AND id = 2;")
+        );
+
+        assert(and_primary_index_select_result.success);
+        assert(and_primary_index_select_result.error_message.empty());
+        assert(and_primary_index_select_result.rows.size() == 1);
+        assert_user_row(
+            require_row_by_key(and_primary_index_select_result.rows, 2),
+            2,
+            30,
+            "Bob"
+        );
+    }
+
+    {
+        const db::execution::ExecutionResult and_secondary_index_select_result = executor.execute(
+            parser.parse("SELECT * FROM users WHERE name = 'Alice' AND age = 30;")
+        );
+
+        assert(and_secondary_index_select_result.success);
+        assert(and_secondary_index_select_result.error_message.empty());
+        assert(and_secondary_index_select_result.rows.size() == 1);
+        assert_user_row(
+            require_row_by_key(and_secondary_index_select_result.rows, 1),
+            1,
+            30,
+            "Alice"
+        );
+    }
+
+    {
+        const db::execution::ExecutionResult or_fallback_select_result = executor.execute(
+            parser.parse("SELECT * FROM users WHERE age = 30 OR id = 3;")
+        );
+
+        assert(or_fallback_select_result.success);
+        assert(or_fallback_select_result.error_message.empty());
+        assert(or_fallback_select_result.rows.size() == 3);
+        assert_user_row(
+            require_row_by_key(or_fallback_select_result.rows, 1),
+            1,
+            30,
+            "Alice"
+        );
+        assert_user_row(
+            require_row_by_key(or_fallback_select_result.rows, 2),
+            2,
+            30,
+            "Bob"
+        );
+        assert_user_row(
+            require_row_by_key(or_fallback_select_result.rows, 3),
+            3,
+            40,
+            "Carol"
+        );
+    }
+
+    {
+        const db::execution::ExecutionResult primary_greater_equal_result = executor.execute(
+            parser.parse("SELECT * FROM users WHERE id >= 2;")
+        );
+
+        assert(primary_greater_equal_result.success);
+        assert(primary_greater_equal_result.error_message.empty());
+        assert(primary_greater_equal_result.rows.size() == 2);
+        assert_user_row(
+            require_row_by_key(primary_greater_equal_result.rows, 2),
+            2,
+            30,
+            "Bob"
+        );
+        assert_user_row(
+            require_row_by_key(primary_greater_equal_result.rows, 3),
+            3,
+            40,
+            "Carol"
+        );
+    }
+
+    {
+        const db::execution::ExecutionResult primary_less_than_result = executor.execute(
+            parser.parse("SELECT * FROM users WHERE id < 3;")
+        );
+
+        assert(primary_less_than_result.success);
+        assert(primary_less_than_result.error_message.empty());
+        assert(primary_less_than_result.rows.size() == 2);
+        assert_user_row(
+            require_row_by_key(primary_less_than_result.rows, 1),
+            1,
+            30,
+            "Alice"
+        );
+        assert_user_row(
+            require_row_by_key(primary_less_than_result.rows, 2),
+            2,
+            30,
+            "Bob"
+        );
+    }
+
+    {
+        const db::execution::ExecutionResult secondary_greater_equal_result = executor.execute(
+            parser.parse("SELECT * FROM users WHERE age >= 40;")
+        );
+
+        assert(secondary_greater_equal_result.success);
+        assert(secondary_greater_equal_result.error_message.empty());
+        assert(secondary_greater_equal_result.rows.size() == 1);
+        assert_user_row(
+            require_row_by_key(secondary_greater_equal_result.rows, 3),
+            3,
+            40,
+            "Carol"
+        );
+    }
+
+    {
+        const db::execution::ExecutionResult secondary_less_than_result = executor.execute(
+            parser.parse("SELECT * FROM users WHERE age < 40;")
+        );
+
+        assert(secondary_less_than_result.success);
+        assert(secondary_less_than_result.error_message.empty());
+        assert(secondary_less_than_result.rows.size() == 2);
+        assert_user_row(
+            require_row_by_key(secondary_less_than_result.rows, 1),
+            1,
+            30,
+            "Alice"
+        );
+        assert_user_row(
+            require_row_by_key(secondary_less_than_result.rows, 2),
+            2,
+            30,
+            "Bob"
+        );
     }
 
     {

@@ -143,7 +143,8 @@ Current limitation:
 - execution still does not use secondary indexes for query planning
 
 ## Current SELECT behavior
-The current executor supports scan-based `SELECT`.
+The current executor supports `SELECT` through either a full table scan or a
+first index-backed candidate scan.
 
 Supported forms:
 - `SELECT * FROM table`
@@ -153,9 +154,9 @@ Supported forms:
 - `WHERE AND`
 - `WHERE OR`
 
-The executor currently evaluates `WHERE` before projection:
+The executor always evaluates `WHERE` before projection:
 ```text
-scan full rows
+scan or index-fetch full rows
 -> filter using full table schema
 -> project selected columns
 ```
@@ -167,6 +168,27 @@ SELECT id FROM users WHERE name = 'Alice';
 
 The `name` column is still available during filtering even though the final
 result only includes `id`.
+
+When a supported index predicate exists, the executor first fetches candidate
+rows through the table/index layer and then still applies the normal `WHERE`
+filter. That keeps correctness simple for combined predicates such as:
+```sql
+SELECT * FROM users WHERE age = 30 AND id = 2;
+```
+
+Current index-scan support:
+- primary-key equality uses direct primary-key lookup
+- primary-key range predicates use primary-index range scan
+- secondary integer equality uses direct secondary-index lookup
+- secondary integer range predicates use secondary-index range scan
+- `AND` expressions can use one indexable side and then filter the full
+  expression afterward
+
+Current index-scan limitation:
+- `OR` expressions still fall back to the full scan path
+- only integer predicates on primary keys or indexed secondary integer columns
+  are index-backed
+- there is no cost-based choice between multiple usable indexes yet
 
 ## Current WHERE behavior
 Supported comparison behavior:
@@ -180,7 +202,8 @@ Supported logical behavior:
 - `OR`
 - SQL-style precedence from the parser, where `AND` binds tighter than `OR`
 
-Current filtering is scan-based. No index scan is used yet.
+Filtering is still applied after row retrieval. Index scans only narrow the
+candidate row set before the final `WHERE` evaluation.
 
 ## Current INSERT behavior
 The current executor supports table-level `INSERT` execution.
@@ -247,14 +270,16 @@ Current limitation:
 - the B+ tree delete path removes leaf entries but does not rebalance yet
 
 ## Current limitations
-- filtering is in-memory after `Table::scan()`
-- no secondary-index lookup during execution yet
+- filtering is still in-memory after row retrieval
+- `OR` index union is not supported yet
+- there is no cost-based planner or physical operator tree yet
+- secondary index scans currently only support integer columns that fit the
+  current encoded key model
 - auto-increment state is rebuilt from table rows on open instead of persisted
   as catalog/table metadata
 - primary-key-changing `UPDATE` is not supported yet
 - query result rows still use `table::Row`, so they carry `Row::key` even when
   the primary-key column is not projected
-- no planner or physical operator tree yet
 
 ## Current test coverage
 The current executor create-table test verifies:
@@ -286,6 +311,12 @@ The current executor index test verifies:
 - missing-table index creation failure
 - primary-index drop rejection
 - repeated secondary-index drop failure
+- primary-key equality lookup through the index path
+- primary-key range lookup through the index path
+- secondary integer equality lookup through the index path
+- secondary integer range lookup through the index path
+- indexed predicate extraction from `AND`
+- `OR` fallback correctness through the normal filter path
 
 The current executor test verifies:
 - executing `SELECT *`
@@ -332,6 +363,6 @@ The current executor delete test verifies:
 Good next execution milestones:
 - introduce a query-result row type that is separate from storage/table rows
 - add basic planner structure
-- add index-scan execution for primary-key predicates
-- maintain secondary indexes during insert, update, and delete
+- add index union support for `OR`
+- add better index selection when multiple predicates are indexable
 - add SQL support for unique/non-unique index distinction

@@ -188,12 +188,31 @@ std::vector<Row> Table::scan_by_secondary_integer_index_range(
         return rows;
     }
 
+    if (start_value > end_value) {
+        return rows;
+    }
+
+    if (
+        end_value < 0 ||
+        start_value > std::numeric_limits<std::uint32_t>::max()
+    ) {
+        return rows;
+    }
+
+    const std::int64_t encoded_start_value =
+        std::max<std::int64_t>(start_value, 0);
+    const std::int64_t encoded_end_value =
+        std::min<std::int64_t>(
+            end_value,
+            std::numeric_limits<std::uint32_t>::max()
+        );
+
     const auto start_key = index::encode_secondary_integer_key(
-        start_value,
+        encoded_start_value,
         std::numeric_limits<std::uint32_t>::min()
     );
     const auto end_key = index::encode_secondary_integer_key(
-        end_value,
+        encoded_end_value,
         std::numeric_limits<std::uint32_t>::max()
     );
 

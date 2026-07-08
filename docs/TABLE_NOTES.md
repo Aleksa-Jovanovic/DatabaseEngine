@@ -88,6 +88,16 @@ This keeps the architecture aligned with a normal heap-plus-index design:
 - heap file stores full row payload
 - primary index stores key-to-row-location mapping
 
+The table layer also exposes first index-backed lookup helpers for execution:
+- `get_by_key(...)` for primary-key equality
+- `get_by_secondary_integer_index(...)` for secondary integer equality
+- `scan_by_primary_key_range(...)` for primary-key range predicates
+- `scan_by_secondary_integer_index_range(...)` for secondary integer range
+  predicates
+
+These methods use the B+ tree to find matching `RowId`s and then fetch the full
+rows from the heap file. The heap remains the source of complete row payloads.
+
 ## Current scan flow
 The table layer now exposes a first full-scan path through `Table::scan()`.
 
@@ -217,6 +227,15 @@ Current secondary-index key model:
 - integer secondary index keys are encoded as `(indexed_value, primary_key)`
 - duplicate indexed values are supported because the primary key makes each
   encoded secondary key unique
+
+Current secondary-index read behavior:
+- equality lookup encodes the requested integer value into a secondary-key
+  range and returns all matching rows
+- range lookup encodes the requested integer lower and upper bounds into a B+
+  tree range scan
+- range lookup clamps bounds to the currently supported non-negative
+  `uint32_t` encoding range
+- impossible ranges return an empty result immediately
 
 Important current limitation:
 - the current secondary integer-key encoding only supports indexed values that

@@ -153,23 +153,26 @@ Execute parsed queries.
 Current status:
 Phase 9 is in progress.
 The project now has a first execution layer with an `Executor` and
-`ExecutionResult`, wired through catalog table lookup and `Table::scan()`.
-The current executor supports scan-based `SELECT`, explicit projection,
-comparison filtering, `BETWEEN`, and logical `AND`/`OR` filtering with
-parser-provided SQL precedence. It also supports SQL-driven `CREATE TABLE`
-with `PRIMARY KEY` and `AUTOINCREMENT` column metadata, SQL-driven
-`DROP TABLE` with catalog and physical-file cleanup, first-pass SQL-driven
-`CREATE INDEX` and `DROP INDEX` for unique integer secondary indexes, `INSERT`
-execution with schema-order values, named columns, simple defaults for omitted
-non-primary columns, and live auto-increment for omitted auto-increment primary
-keys. Execution is still scan-based, now supports `UPDATE` for non-primary-key
-assignments with affected-row counts, and now supports scan-based `DELETE`
-with affected-row counts. The table layer now maintains integer secondary
-indexes on insert, same-primary-key update, and delete using encoded
-`(indexed_value, primary_key)` B+ tree keys, and SQL `CREATE INDEX` now
-backfills existing rows into the new secondary index. Index scans, non-integer
-secondary indexes, and transactional index-maintenance rollback are still
-pending.
+`ExecutionResult`, wired through catalog table lookup, table scans, and first
+index-backed candidate scans. The current executor supports `SELECT`, explicit
+projection, comparison filtering, `BETWEEN`, and logical `AND`/`OR` filtering
+with parser-provided SQL precedence. It also supports SQL-driven
+`CREATE TABLE` with `PRIMARY KEY` and `AUTOINCREMENT` column metadata,
+SQL-driven `DROP TABLE` with catalog and physical-file cleanup, first-pass
+SQL-driven `CREATE INDEX` and `DROP INDEX` for integer secondary indexes,
+`INSERT` execution with schema-order values, named columns, simple defaults for
+omitted non-primary columns, and live auto-increment for omitted
+auto-increment primary keys. Execution now supports `UPDATE` for
+non-primary-key assignments with affected-row counts and `DELETE` with
+affected-row counts. The table layer maintains integer secondary indexes on
+insert, same-primary-key update, and delete using encoded
+`(indexed_value, primary_key)` B+ tree keys, and SQL `CREATE INDEX` backfills
+existing rows into the new secondary index. `SELECT` can now use primary and
+secondary integer indexes for equality and range predicates, including one
+indexable predicate inside an `AND` expression, while still applying the full
+`WHERE` filter afterward. OR index union, cost-based index selection,
+non-integer secondary indexes, and transactional index-maintenance rollback are
+still pending.
 
 ## Phase 10 - Transactions and recovery
 - transactions

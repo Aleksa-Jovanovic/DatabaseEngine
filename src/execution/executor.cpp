@@ -1,6 +1,8 @@
 #include "execution/executor.h"
 
+#include <algorithm>
 #include <cstddef>
+#include <limits>
 #include <optional>
 #include <utility>
 #include <variant>
@@ -365,6 +367,233 @@ std::vector<table::Row> filter_rows(
     }
 
     return filtered_rows;
+}
+
+std::optional<catalog::IndexDefinition> find_secondary_index_for_column(
+    const catalog::TableDefinition& table_definition,
+    const std::string& column_name
+) {
+    for (const auto& index_definition : table_definition.indexes) {
+        if (index_definition.is_primary) {
+            continue;
+        }
+
+        if (index_definition.column_name == column_name) {
+            return index_definition;
+        }
+    }
+
+    return std::nullopt;
+}
+
+std::optional<std::pair<std::int64_t, std::int64_t>> bounds_for_comparison(
+    sql::ComparisonOperator comparison_operator,
+    std::int64_t value
+) {
+    switch (comparison_operator) {
+        case sql::ComparisonOperator::Equal:
+            return std::pair<std::int64_t, std::int64_t>{value, value};
+
+        case sql::ComparisonOperator::GreaterThan:
+            if (value == std::numeric_limits<std::int64_t>::max()) {
+                return std::pair<std::int64_t, std::int64_t>{1, 0};
+            }
+
+            return std::pair<std::int64_t, std::int64_t>{
+                value + 1,
+                std::numeric_limits<std::int64_t>::max()
+            };
+
+        case sql::ComparisonOperator::GreaterThanOrEqual:
+            return std::pair<std::int64_t, std::int64_t>{
+                value,
+                std::numeric_limits<std::int64_t>::max()
+            };
+
+        case sql::ComparisonOperator::LessThan:
+            if (value == std::numeric_limits<std::int64_t>::min()) {
+                return std::pair<std::int64_t, std::int64_t>{1, 0};
+            }
+
+            return std::pair<std::int64_t, std::int64_t>{
+                std::numeric_limits<std::int64_t>::min(),
+                value - 1
+            };
+
+        case sql::ComparisonOperator::LessThanOrEqual:
+            return std::pair<std::int64_t, std::int64_t>{
+                std::numeric_limits<std::int64_t>::min(),
+                value
+            };
+    }
+
+    return std::nullopt;
+}
+
+std::optional<std::vector<table::Row>> try_index_scan_for_comparison(
+    const catalog::TableDefinition& table_definition,
+    table::Table& table,
+    const sql::ComparisonExpression& comparison
+) {
+    const auto* integer_literal =
+        std::get_if<sql::IntegerLiteral>(&comparison.value);
+
+    if (integer_literal == nullptr) {
+        return std::nullopt;
+    }
+
+    const auto column_index = find_column_index(
+        table_definition,
+        comparison.column_name
+    );
+
+    if (!column_index.has_value()) {
+        return std::nullopt;
+    }
+
+    const auto& column = table_definition.schema.columns()[column_index.value()];
+
+    if (column.is_primary_key) {
+        if (comparison.comparison_operator == sql::ComparisonOperator::Equal) {
+            if (
+                integer_literal->value < 0 ||
+                integer_literal->value > std::numeric_limits<std::uint32_t>::max()
+            ) {
+                return std::vector<table::Row>{};
+            }
+
+            std::vector<table::Row> rows;
+
+            auto row = table.get_by_key(
+                static_cast<std::uint32_t>(integer_literal->value)
+            );
+
+            if (row.has_value()) {
+                rows.push_back(row.value());
+            }
+
+            return rows;
+        }
+
+        const auto bounds = bounds_for_comparison(
+            comparison.comparison_operator,
+            integer_literal->value
+        );
+
+        if (!bounds.has_value()) {
+            return std::nullopt;
+        }
+
+        const std::int64_t start_value = bounds->first;
+        const std::int64_t end_value = bounds->second;
+
+        if (start_value > end_value) {
+            return std::vector<table::Row>{};
+        }
+
+        if (
+            end_value < 0 ||
+            start_value > std::numeric_limits<std::uint32_t>::max()
+        ) {
+            return std::vector<table::Row>{};
+        }
+
+        const std::uint32_t start_key = static_cast<std::uint32_t>(
+            std::max<std::int64_t>(start_value, 0)
+        );
+
+        const std::uint32_t end_key = static_cast<std::uint32_t>(
+            std::min<std::int64_t>(
+                end_value,
+                std::numeric_limits<std::uint32_t>::max()
+            )
+        );
+
+        return table.scan_by_primary_key_range(start_key, end_key);
+    }
+
+    const auto secondary_index = find_secondary_index_for_column(
+        table_definition,
+        comparison.column_name
+    );
+
+    if (secondary_index.has_value()) {
+        if (comparison.comparison_operator == sql::ComparisonOperator::Equal) {
+            return table.get_by_secondary_integer_index(
+                secondary_index->index_name,
+                integer_literal->value
+            );
+        }
+
+        const auto bounds = bounds_for_comparison(
+            comparison.comparison_operator,
+            integer_literal->value
+        );
+
+        if (!bounds.has_value()) {
+            return std::nullopt;
+        }
+
+        if (bounds->first > bounds->second) {
+            return std::vector<table::Row>{};
+        }
+
+        return table.scan_by_secondary_integer_index_range(
+            secondary_index->index_name,
+            bounds->first,
+            bounds->second
+        );
+    }
+
+    return std::nullopt;
+}
+
+std::optional<std::vector<table::Row>> try_index_scan(
+    const catalog::TableDefinition& table_definition,
+    table::Table& table,
+    const sql::WhereExpression& expression
+) {
+    if (expression.kind == sql::WhereExpressionKind::Comparison) {
+        if (!expression.comparison.has_value()) {
+            return std::nullopt;
+        }
+
+        return try_index_scan_for_comparison(
+            table_definition,
+            table,
+            expression.comparison.value()
+        );
+    }
+
+    if (expression.kind == sql::WhereExpressionKind::Logical) {
+        if (!expression.logical_operator.has_value() ||
+            expression.left == nullptr ||
+            expression.right == nullptr) {
+            return std::nullopt;
+        }
+
+        if (expression.logical_operator.value() != sql::LogicalOperator::And) {
+            return std::nullopt;
+        }
+
+        const auto left_index_scan = try_index_scan(
+            table_definition,
+            table,
+            *expression.left
+        );
+
+        if (left_index_scan.has_value()) {
+            return left_index_scan;
+        }
+
+        return try_index_scan(
+            table_definition,
+            table,
+            *expression.right
+        );
+    }
+
+    return std::nullopt;
 }
 
 // INSERT STATEMENT
@@ -835,7 +1064,24 @@ ExecutionResult Executor::execute_select(const sql::SelectStatement& select_stat
         };
     }
 
-    std::vector<table::Row> rows = table->scan();
+    std::vector<table::Row> rows;
+
+    std::optional<std::vector<table::Row>> indexed_rows = std::nullopt;
+
+    if (select_statement.where_expression.has_value()) {
+        indexed_rows = try_index_scan(
+            table_definition.value(),
+            *table,
+            select_statement.where_expression.value()
+        );
+    }
+
+    if (indexed_rows.has_value()) {
+        rows = indexed_rows.value();
+    } else {
+        rows = table->scan();
+    }
+
     rows = filter_rows(
         table_definition.value(),
         rows,
