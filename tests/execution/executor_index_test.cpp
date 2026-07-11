@@ -225,6 +225,28 @@ int main() {
     }
 
     {
+        const db::execution::ExecutionResult or_deduplicated_select_result = executor.execute(
+            parser.parse("SELECT * FROM users WHERE age = 30 OR id = 1;")
+        );
+
+        assert(or_deduplicated_select_result.success);
+        assert(or_deduplicated_select_result.error_message.empty());
+        assert(or_deduplicated_select_result.rows.size() == 2);
+        assert_user_row(
+            require_row_by_key(or_deduplicated_select_result.rows, 1),
+            1,
+            30,
+            "Alice"
+        );
+        assert_user_row(
+            require_row_by_key(or_deduplicated_select_result.rows, 2),
+            2,
+            30,
+            "Bob"
+        );
+    }
+
+    {
         const db::execution::ExecutionResult primary_greater_equal_result = executor.execute(
             parser.parse("SELECT * FROM users WHERE id >= 2;")
         );
@@ -269,6 +291,28 @@ int main() {
     }
 
     {
+        const db::execution::ExecutionResult primary_between_result = executor.execute(
+            parser.parse("SELECT * FROM users WHERE id BETWEEN 2 AND 3;")
+        );
+
+        assert(primary_between_result.success);
+        assert(primary_between_result.error_message.empty());
+        assert(primary_between_result.rows.size() == 2);
+        assert_user_row(
+            require_row_by_key(primary_between_result.rows, 2),
+            2,
+            30,
+            "Bob"
+        );
+        assert_user_row(
+            require_row_by_key(primary_between_result.rows, 3),
+            3,
+            40,
+            "Carol"
+        );
+    }
+
+    {
         const db::execution::ExecutionResult secondary_greater_equal_result = executor.execute(
             parser.parse("SELECT * FROM users WHERE age >= 40;")
         );
@@ -304,6 +348,38 @@ int main() {
             30,
             "Bob"
         );
+    }
+
+    {
+        const db::execution::ExecutionResult secondary_between_result = executor.execute(
+            parser.parse("SELECT * FROM users WHERE age BETWEEN 30 AND 35;")
+        );
+
+        assert(secondary_between_result.success);
+        assert(secondary_between_result.error_message.empty());
+        assert(secondary_between_result.rows.size() == 2);
+        assert_user_row(
+            require_row_by_key(secondary_between_result.rows, 1),
+            1,
+            30,
+            "Alice"
+        );
+        assert_user_row(
+            require_row_by_key(secondary_between_result.rows, 2),
+            2,
+            30,
+            "Bob"
+        );
+    }
+
+    {
+        const db::execution::ExecutionResult empty_secondary_between_result = executor.execute(
+            parser.parse("SELECT * FROM users WHERE age BETWEEN 31 AND 39;")
+        );
+
+        assert(empty_secondary_between_result.success);
+        assert(empty_secondary_between_result.error_message.empty());
+        assert(empty_secondary_between_result.rows.empty());
     }
 
     {

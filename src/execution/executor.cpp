@@ -430,6 +430,93 @@ std::optional<std::pair<std::int64_t, std::int64_t>> bounds_for_comparison(
     return std::nullopt;
 }
 
+std::vector<table::Row> union_rows_by_key(
+    const std::vector<table::Row>& left_rows,
+    const std::vector<table::Row>& right_rows
+) {
+    std::vector<table::Row> rows = left_rows;
+
+    for (const table::Row& right_row : right_rows) {
+        const auto duplicate = std::find_if(
+            rows.begin(),
+            rows.end(),
+            [&](const table::Row& existing_row) {
+                return existing_row.key == right_row.key;
+            }
+        );
+
+        if (duplicate == rows.end()) {
+            rows.push_back(right_row);
+        }
+    }
+
+    return rows;
+}
+
+std::vector<table::Row> scan_primary_key_range(
+    table::Table& table,
+    std::int64_t start_value,
+    std::int64_t end_value
+) {
+    if (start_value > end_value) {
+        return {};
+    }
+
+    if (
+        end_value < 0 ||
+        start_value > std::numeric_limits<std::uint32_t>::max()
+    ) {
+        return {};
+    }
+
+    const std::uint32_t start_key = static_cast<std::uint32_t>(
+        std::max<std::int64_t>(start_value, 0)
+    );
+
+    const std::uint32_t end_key = static_cast<std::uint32_t>(
+        std::min<std::int64_t>(
+            end_value,
+            std::numeric_limits<std::uint32_t>::max()
+        )
+    );
+
+    return table.scan_by_primary_key_range(start_key, end_key);
+}
+
+std::optional<std::vector<table::Row>> try_index_scan_for_integer_range(
+    const catalog::TableDefinition& table_definition,
+    table::Table& table,
+    const std::string& column_name,
+    std::int64_t start_value,
+    std::int64_t end_value
+) {
+    const auto column_index = find_column_index(table_definition, column_name);
+    if (!column_index.has_value()) {
+        return std::nullopt;
+    }
+
+    const auto& column = table_definition.schema.columns()[column_index.value()];
+
+    if (column.is_primary_key) {
+        return scan_primary_key_range(table, start_value, end_value);
+    }
+
+    const auto secondary_index = find_secondary_index_for_column(
+        table_definition,
+        column_name
+    );
+
+    if (!secondary_index.has_value()) {
+        return std::nullopt;
+    }
+
+    return table.scan_by_secondary_integer_index_range(
+        secondary_index->index_name,
+        start_value,
+        end_value
+    );
+}
+
 std::optional<std::vector<table::Row>> try_index_scan_for_comparison(
     const catalog::TableDefinition& table_definition,
     table::Table& table,
@@ -487,29 +574,7 @@ std::optional<std::vector<table::Row>> try_index_scan_for_comparison(
         const std::int64_t start_value = bounds->first;
         const std::int64_t end_value = bounds->second;
 
-        if (start_value > end_value) {
-            return std::vector<table::Row>{};
-        }
-
-        if (
-            end_value < 0 ||
-            start_value > std::numeric_limits<std::uint32_t>::max()
-        ) {
-            return std::vector<table::Row>{};
-        }
-
-        const std::uint32_t start_key = static_cast<std::uint32_t>(
-            std::max<std::int64_t>(start_value, 0)
-        );
-
-        const std::uint32_t end_key = static_cast<std::uint32_t>(
-            std::min<std::int64_t>(
-                end_value,
-                std::numeric_limits<std::uint32_t>::max()
-            )
-        );
-
-        return table.scan_by_primary_key_range(start_key, end_key);
+        return scan_primary_key_range(table, start_value, end_value);
     }
 
     const auto secondary_index = find_secondary_index_for_column(
@@ -548,6 +613,29 @@ std::optional<std::vector<table::Row>> try_index_scan_for_comparison(
     return std::nullopt;
 }
 
+std::optional<std::vector<table::Row>> try_index_scan_for_between(
+    const catalog::TableDefinition& table_definition,
+    table::Table& table,
+    const sql::BetweenExpression& between
+) {
+    const auto* lower_bound =
+        std::get_if<sql::IntegerLiteral>(&between.lower_bound);
+    const auto* upper_bound =
+        std::get_if<sql::IntegerLiteral>(&between.upper_bound);
+
+    if (lower_bound == nullptr || upper_bound == nullptr) {
+        return std::nullopt;
+    }
+
+    return try_index_scan_for_integer_range(
+        table_definition,
+        table,
+        between.column_name,
+        lower_bound->value,
+        upper_bound->value
+    );
+}
+
 std::optional<std::vector<table::Row>> try_index_scan(
     const catalog::TableDefinition& table_definition,
     table::Table& table,
@@ -565,14 +653,22 @@ std::optional<std::vector<table::Row>> try_index_scan(
         );
     }
 
+    if (expression.kind == sql::WhereExpressionKind::Between) {
+        if (!expression.between.has_value()) {
+            return std::nullopt;
+        }
+
+        return try_index_scan_for_between(
+            table_definition,
+            table,
+            expression.between.value()
+        );
+    }
+
     if (expression.kind == sql::WhereExpressionKind::Logical) {
         if (!expression.logical_operator.has_value() ||
             expression.left == nullptr ||
             expression.right == nullptr) {
-            return std::nullopt;
-        }
-
-        if (expression.logical_operator.value() != sql::LogicalOperator::And) {
             return std::nullopt;
         }
 
@@ -582,15 +678,30 @@ std::optional<std::vector<table::Row>> try_index_scan(
             *expression.left
         );
 
-        if (left_index_scan.has_value()) {
-            return left_index_scan;
-        }
-
-        return try_index_scan(
+        const auto right_index_scan = try_index_scan(
             table_definition,
             table,
             *expression.right
         );
+
+        if (expression.logical_operator.value() == sql::LogicalOperator::And) {
+            if (left_index_scan.has_value()) {
+                return left_index_scan;
+            }
+
+            return right_index_scan;
+        }
+
+        if (expression.logical_operator.value() == sql::LogicalOperator::Or) {
+            if (!left_index_scan.has_value() || !right_index_scan.has_value()) {
+                return std::nullopt;
+            }
+
+            return union_rows_by_key(
+                left_index_scan.value(),
+                right_index_scan.value()
+            );
+        }
     }
 
     return std::nullopt;

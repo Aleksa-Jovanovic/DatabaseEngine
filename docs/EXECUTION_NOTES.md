@@ -140,7 +140,8 @@ Current limitation:
 - only non-primary integer columns can be indexed
 - duplicate indexed integer values are supported through encoded
   `(indexed_value, primary_key)` B+ tree keys
-- execution still does not use secondary indexes for query planning
+- `SELECT` execution can use secondary integer indexes for equality, range,
+  and `BETWEEN` predicates
 
 ## Current SELECT behavior
 The current executor supports `SELECT` through either a full table scan or a
@@ -179,13 +180,17 @@ SELECT * FROM users WHERE age = 30 AND id = 2;
 Current index-scan support:
 - primary-key equality uses direct primary-key lookup
 - primary-key range predicates use primary-index range scan
+- primary-key `BETWEEN` uses primary-index range scan
 - secondary integer equality uses direct secondary-index lookup
 - secondary integer range predicates use secondary-index range scan
+- secondary integer `BETWEEN` uses secondary-index range scan
 - `AND` expressions can use one indexable side and then filter the full
   expression afterward
+- `OR` expressions can union both sides when both sides are indexable
 
 Current index-scan limitation:
-- `OR` expressions still fall back to the full scan path
+- `OR` expressions still fall back to the full scan path when either side is
+  not indexable
 - only integer predicates on primary keys or indexed secondary integer columns
   are index-backed
 - there is no cost-based choice between multiple usable indexes yet
@@ -271,7 +276,7 @@ Current limitation:
 
 ## Current limitations
 - filtering is still in-memory after row retrieval
-- `OR` index union is not supported yet
+- `OR` index union only works when both branches are indexable
 - there is no cost-based planner or physical operator tree yet
 - secondary index scans currently only support integer columns that fit the
   current encoded key model
@@ -315,8 +320,10 @@ The current executor index test verifies:
 - primary-key range lookup through the index path
 - secondary integer equality lookup through the index path
 - secondary integer range lookup through the index path
+- indexed `BETWEEN` lookup through primary and secondary indexes
 - indexed predicate extraction from `AND`
-- `OR` fallback correctness through the normal filter path
+- indexed `OR` union with duplicate-row removal
+- `OR` fallback correctness through the normal filter path when needed
 
 The current executor test verifies:
 - executing `SELECT *`
@@ -363,6 +370,6 @@ The current executor delete test verifies:
 Good next execution milestones:
 - introduce a query-result row type that is separate from storage/table rows
 - add basic planner structure
-- add index union support for `OR`
+- improve partial index usage for mixed indexable/non-indexable `OR`
 - add better index selection when multiple predicates are indexable
 - add SQL support for unique/non-unique index distinction

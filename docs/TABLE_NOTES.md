@@ -107,9 +107,9 @@ The scan flow works like this:
 3. reattach `VarRecord::key` as `Row::key`
 4. return the visible logical rows to the caller
 
-This is the foundation for the first SQL executor implementation. Early
-`SELECT` execution can scan all rows and apply filtering/projection in memory
-before index-scan optimization exists.
+This is the foundation for the SQL executor's fallback path. `SELECT`
+execution can scan all rows and apply filtering/projection in memory when no
+usable index predicate is available.
 
 ## Current insert flow
 The current table insert works like this:

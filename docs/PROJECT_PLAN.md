@@ -169,10 +169,11 @@ insert, same-primary-key update, and delete using encoded
 `(indexed_value, primary_key)` B+ tree keys, and SQL `CREATE INDEX` backfills
 existing rows into the new secondary index. `SELECT` can now use primary and
 secondary integer indexes for equality and range predicates, including one
-indexable predicate inside an `AND` expression, while still applying the full
-`WHERE` filter afterward. OR index union, cost-based index selection,
-non-integer secondary indexes, and transactional index-maintenance rollback are
-still pending.
+indexable predicate inside an `AND` expression, indexed `BETWEEN`, and `OR`
+union when both branches are indexable, while still applying the full `WHERE`
+filter afterward. Cost-based index selection, mixed indexable/non-indexable
+`OR` optimization, non-integer secondary indexes, and transactional
+index-maintenance rollback are still pending.
 
 ## Phase 10 - Transactions and recovery
 - transactions
