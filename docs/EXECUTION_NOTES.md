@@ -370,6 +370,8 @@ The current executor delete test verifies:
 Good next execution milestones:
 - introduce a query-result row type that is separate from storage/table rows
 - add basic planner structure
+- refactor direct executor control flow into physical operators such as
+  `SeqScan`, `IndexScan`, `Filter`, and `Projection`
 - improve partial index usage for mixed indexable/non-indexable `OR`
 - add better index selection when multiple predicates are indexable
 - add SQL support for unique/non-unique index distinction

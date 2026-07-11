@@ -173,7 +173,10 @@ indexable predicate inside an `AND` expression, indexed `BETWEEN`, and `OR`
 union when both branches are indexable, while still applying the full `WHERE`
 filter afterward. Cost-based index selection, mixed indexable/non-indexable
 `OR` optimization, non-integer secondary indexes, and transactional
-index-maintenance rollback are still pending.
+index-maintenance rollback are still pending. The current executor is still a
+direct control-flow implementation rather than a physical operator tree; a
+future refactor can introduce explicit operators such as `SeqScan`,
+`IndexScan`, `Filter`, and `Projection` on top of the same table/index APIs.
 
 ## Phase 10 - Transactions and recovery
 - transactions
@@ -183,3 +186,34 @@ index-maintenance rollback are still pending.
 
 Goal:
 Support correctness and durability.
+
+Current status:
+Deferred for now. The project already has a functional single-threaded storage,
+catalog, SQL parsing, and execution path. Transactions, WAL, and crash recovery
+remain important database-engine topics, but they are intentionally paused while
+the project moves into a presentation/demo layer.
+
+## Phase 11 - Local web frontend and demo
+- local web interface
+- SQL query input
+- query result display
+- schema/catalog display
+- table row browser
+- simple execution feedback
+
+Goal:
+Make the database engine easier to present and interact with through a small
+local frontend.
+
+Planned scope:
+- provide a text area for writing SQL queries
+- execute queries against the current C++ database engine
+- show query results in a table-like result panel
+- show catalog metadata such as tables, columns, primary keys, and indexes
+- show stored table rows for the selected table
+- optionally show whether a query used a sequential scan or index-backed path
+
+Notes:
+This phase is presentation-focused rather than a storage-engine correctness
+phase. A simple local web UI is preferred over only a CLI because it makes the
+engine's behavior easier to demonstrate during a thesis/project presentation.
