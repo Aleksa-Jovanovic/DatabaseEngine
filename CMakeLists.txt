@@ -49,6 +49,10 @@ target_link_libraries(DatabaseEngineServer
         db_storage
 )
 
+add_executable(GenerateStudentsSql
+    tools/generate_students_sql.cpp
+)
+
 function(add_db_test test_name test_source)
     add_executable(${test_name}
         ${test_source}

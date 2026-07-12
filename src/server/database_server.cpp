@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <cstring>
 #include <exception>
 #include <fstream>
@@ -38,6 +39,21 @@ std::string field_value_to_string(const table::FieldValue& value) {
     }
 
     return "";
+}
+
+std::string column_type_to_string(catalog::ColumnType type) {
+    switch (type) {
+        case catalog::ColumnType::Integer:
+            return "INTEGER";
+        case catalog::ColumnType::String:
+            return "STRING";
+        case catalog::ColumnType::Boolean:
+            return "BOOLEAN";
+        case catalog::ColumnType::Date:
+            return "DATE";
+    }
+
+    return "UNKNOWN";
 }
 
 std::vector<std::string> row_to_strings(const table::Row& row) {
@@ -102,6 +118,7 @@ std::string query_response_to_json(const QueryResponse& response) {
     json << "\"success\":" << (response.success ? "true" : "false") << ",";
     json << "\"error_message\":\"" << escape_json_string(response.error_message) << "\",";
     json << "\"affected_rows\":" << response.affected_rows << ",";
+    json << "\"execution_time_ms\":" << response.execution_time_ms << ",";
 
     json << "\"columns\":[";
     for (std::size_t i = 0; i < response.column_names.size(); ++i) {
@@ -136,6 +153,68 @@ std::string query_response_to_json(const QueryResponse& response) {
     json << "]";
 
     json << "}";
+    return json.str();
+}
+
+std::string catalog_to_json(const catalog::CatalogMetadata& metadata) {
+    std::ostringstream json;
+
+    json << "{";
+    json << "\"tables\":[";
+
+    for (std::size_t table_index = 0; table_index < metadata.tables.size(); ++table_index) {
+        const catalog::TableDefinition& table = metadata.tables[table_index];
+
+        if (table_index > 0) {
+            json << ",";
+        }
+
+        json << "{";
+        json << "\"name\":\"" << escape_json_string(table.table_name) << "\",";
+        json << "\"heap_file\":\"" << escape_json_string(table.heap_file_name) << "\",";
+
+        json << "\"columns\":[";
+        const auto& columns = table.schema.columns();
+        for (std::size_t column_index = 0; column_index < columns.size(); ++column_index) {
+            const catalog::ColumnDefinition& column = columns[column_index];
+
+            if (column_index > 0) {
+                json << ",";
+            }
+
+            json << "{";
+            json << "\"name\":\"" << escape_json_string(column.name) << "\",";
+            json << "\"type\":\"" << column_type_to_string(column.type) << "\",";
+            json << "\"primary_key\":" << (column.is_primary_key ? "true" : "false") << ",";
+            json << "\"auto_increment\":" << (column.is_auto_increment ? "true" : "false");
+            json << "}";
+        }
+        json << "],";
+
+        json << "\"indexes\":[";
+        for (std::size_t index = 0; index < table.indexes.size(); ++index) {
+            const catalog::IndexDefinition& index_definition = table.indexes[index];
+
+            if (index > 0) {
+                json << ",";
+            }
+
+            json << "{";
+            json << "\"name\":\"" << escape_json_string(index_definition.index_name) << "\",";
+            json << "\"column\":\"" << escape_json_string(index_definition.column_name) << "\",";
+            json << "\"file\":\"" << escape_json_string(index_definition.file_name) << "\",";
+            json << "\"primary\":" << (index_definition.is_primary ? "true" : "false") << ",";
+            json << "\"unique\":" << (index_definition.is_unique ? "true" : "false");
+            json << "}";
+        }
+        json << "]";
+
+        json << "}";
+    }
+
+    json << "]";
+    json << "}";
+
     return json.str();
 }
 
@@ -307,24 +386,121 @@ std::string request_body(const std::string& request) {
     return request.substr(body_start + 4);
 }
 
+std::string trim_sql_statement(const std::string& sql) {
+    const std::size_t first = sql.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) {
+        return "";
+    }
+
+    const std::size_t last = sql.find_last_not_of(" \t\r\n");
+    return sql.substr(first, last - first + 1);
+}
+
+std::vector<std::string> split_sql_statements(const std::string& sql) {
+    std::vector<std::string> statements;
+
+    std::string current_statement;
+    bool inside_string = false;
+
+    for (char character : sql) {
+        current_statement += character;
+
+        if (character == '\'') {
+            inside_string = !inside_string;
+            continue;
+        }
+
+        if (character == ';' && !inside_string) {
+            std::string statement = trim_sql_statement(current_statement);
+
+            if (!statement.empty()) {
+                statements.push_back(statement);
+            }
+
+            current_statement.clear();
+        }
+    }
+
+    std::string trailing_statement = trim_sql_statement(current_statement);
+    if (!trailing_statement.empty()) {
+        trailing_statement += ";";
+        statements.push_back(trailing_statement);
+    }
+
+    return statements;
+}
+
 }  // namespace
 
 DatabaseServer::DatabaseServer()
-    : catalog_(),
+    : catalog_("database_catalog.db"),
       parser_(),
       executor_(catalog_) {}
 
 QueryResponse DatabaseServer::execute_query(const std::string& sql) {
+    const auto started_at = std::chrono::steady_clock::now();
+
     try {
-        const auto statement = parser_.parse(sql);
-        return to_query_response(executor_.execute(statement));
+        const std::vector<std::string> statements = split_sql_statements(sql);
+
+        if (statements.empty()) {
+            const auto finished_at = std::chrono::steady_clock::now();
+
+            return QueryResponse{
+                false,
+                "No SQL statement provided.",
+                {},
+                {},
+                0,
+                std::chrono::duration<double, std::milli>(
+                    finished_at - started_at
+                ).count()
+            };
+        }
+
+        QueryResponse final_response;
+        std::size_t total_affected_rows = 0;
+
+        for (const std::string& statement_sql : statements) {
+            const auto statement = parser_.parse(statement_sql);
+            QueryResponse response =
+                to_query_response(executor_.execute(statement));
+
+            total_affected_rows += response.affected_rows;
+
+            final_response = response;
+            final_response.affected_rows = total_affected_rows;
+
+            if (!response.success) {
+                const auto finished_at = std::chrono::steady_clock::now();
+                final_response.execution_time_ms =
+                    std::chrono::duration<double, std::milli>(
+                        finished_at - started_at
+                    ).count();
+
+                return final_response;
+            }
+        }
+
+        const auto finished_at = std::chrono::steady_clock::now();
+        final_response.execution_time_ms =
+            std::chrono::duration<double, std::milli>(
+                finished_at - started_at
+            ).count();
+
+        return final_response;
     } catch (const std::exception& exception) {
+        const auto finished_at = std::chrono::steady_clock::now();
+
         return QueryResponse{
             false,
             exception.what(),
             {},
             {},
-            0
+            0,
+            std::chrono::duration<double, std::milli>(
+                finished_at - started_at
+            ).count()
         };
     }
 }
@@ -392,6 +568,13 @@ bool DatabaseServer::start(const std::string& host, int port) {
                 "OK",
                 "application/json",
                 query_response_to_json(query_response)
+            );
+        } else if (method == "GET" && path == "/catalog") {
+            response = make_http_response(
+                200,
+                "OK",
+                "application/json",
+                catalog_to_json(catalog_.metadata())
             );
         } else if (method == "GET") {
             const std::string normalized_path = path == "/" ? "/index.html" : path;

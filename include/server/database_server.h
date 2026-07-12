@@ -16,6 +16,7 @@ struct QueryResponse {
     std::vector<std::string> column_names;
     std::vector<std::vector<std::string>> rows;
     std::size_t affected_rows = 0;
+    double execution_time_ms = 0.0;
 };
 
 class DatabaseServer {
