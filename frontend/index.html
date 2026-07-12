@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Database Engine Demo</title>
+    <link rel="stylesheet" href="/styles/app.css">
+</head>
+<body>
+    <main class="shell">
+        <header class="app-header">
+            <div>
+                <p class="eyebrow">Database Engine Workbench</p>
+                <h1>Local SQL interface for storage, indexing, and execution</h1>
+            </div>
+            <div class="server-pill">
+                <span></span>
+                localhost:8080
+            </div>
+        </header>
+
+        <section class="workspace">
+            <section class="query-panel">
+                <div class="panel-header">
+                    <div>
+                        <p class="panel-kicker">Write and execute SQL</p>
+                        <h2>SQL Query Editor</h2>
+                    </div>
+                    <button id="run-query-button" type="button">Run query</button>
+                </div>
+
+                <textarea id="sql-input" spellcheck="false">CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, age INTEGER, name STRING);</textarea>
+
+                <div class="quick-actions">
+                    <button type="button" data-query="INSERT INTO users (age, name) VALUES (30, 'Alice');">Insert Alice</button>
+                    <button type="button" data-query="INSERT INTO users (age, name) VALUES (40, 'Bob');">Insert Bob</button>
+                    <button type="button" data-query="CREATE INDEX users_age_idx ON users (age);">Create age index</button>
+                    <button type="button" data-query="SELECT * FROM users WHERE age BETWEEN 30 AND 40;">Select range</button>
+                </div>
+            </section>
+
+            <section class="result-panel">
+                <div class="panel-header">
+                    <div>
+                        <p class="panel-kicker">Execution output</p>
+                        <h2>Result</h2>
+                    </div>
+                    <span id="status-badge" class="status-badge idle">Idle</span>
+                </div>
+
+                <p id="message" class="message">
+                    Start the server and run a query to see results here.
+                </p>
+
+                <div class="result-meta">
+                    <span id="affected-rows">Affected rows: -</span>
+                    <span id="execution-time">Execution time: -</span>
+                </div>
+                <div id="result-table" class="result-table"></div>
+            </section>
+
+            <aside class="catalog-panel">
+                <div class="panel-header">
+                    <div>
+                        <p class="panel-kicker">Schema inspector</p>
+                        <h2>Catalog</h2>
+                    </div>
+                    <span class="status-dot"></span>
+                </div>
+
+                <div class="catalog-placeholder">
+                    <h3>Tables and columns</h3>
+                    <p>
+                        Catalog metadata will appear here once we add the
+                        schema endpoint.
+                    </p>
+
+                    <div class="catalog-card">
+                        <strong>Planned view</strong>
+                        <span>tables</span>
+                        <span>columns</span>
+                        <span>primary keys</span>
+                        <span>indexes</span>
+                    </div>
+                </div>
+            </aside>
+
+            <section class="info-panel">
+                <div class="panel-header compact">
+                    <div>
+                        <p class="panel-kicker">Supported syntax</p>
+                        <h2>SQL quick reference</h2>
+                    </div>
+                </div>
+                <div class="sql-help-grid">
+                    <code>CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, age INTEGER, name STRING);</code>
+                    <code>DROP TABLE users;</code>
+                    <code>INSERT INTO users (age, name) VALUES (30, 'Alice');</code>
+                    <code>INSERT INTO users VALUES (1, 30, 'Alice');</code>
+                    <code>INSERT INTO users VALUES (30, 'Alice'); -- omit AUTOINCREMENT primary key</code>
+                    <code>SELECT * FROM users;</code>
+                    <code>SELECT id, name FROM users WHERE age &gt;= 30;</code>
+                    <code>SELECT * FROM users WHERE age BETWEEN 30 AND 40;</code>
+                    <code>SELECT * FROM users WHERE age = 30 AND name = 'Alice';</code>
+                    <code>SELECT * FROM users WHERE age = 30 OR id = 1;</code>
+                    <code>UPDATE users SET name = 'Bob' WHERE id = 1;</code>
+                    <code>UPDATE users SET age = 31;</code>
+                    <code>DELETE FROM users WHERE id = 1;</code>
+                    <code>DELETE FROM users;</code>
+                    <code>CREATE INDEX users_age_idx ON users (age);</code>
+                    <code>DROP INDEX users_age_idx;</code>
+                </div>
+            </section>
+        </section>
+    </main>
+
+    <script src="/scripts/app.js"></script>
+</body>
+</html>

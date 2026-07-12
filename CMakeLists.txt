@@ -23,6 +23,7 @@ add_library(db_storage
     src/sql/parser.cpp
     src/sql/ast.cpp
     src/execution/executor.cpp
+    src/server/database_server.cpp
 )
 
 target_include_directories(db_storage
@@ -35,6 +36,15 @@ add_executable(DatabaseEngine
 )
 
 target_link_libraries(DatabaseEngine
+    PRIVATE
+        db_storage
+)
+
+add_executable(DatabaseEngineServer
+    src/server/main_server.cpp
+)
+
+target_link_libraries(DatabaseEngineServer
     PRIVATE
         db_storage
 )
