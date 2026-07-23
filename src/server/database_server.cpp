@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstring>
 #include <exception>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <optional>
@@ -21,6 +22,14 @@
 
 namespace db::server {
 namespace {
+
+constexpr const char* DATA_DIRECTORY = "data";
+
+std::string catalog_file_name() {
+    std::error_code error;
+    std::filesystem::create_directories(DATA_DIRECTORY, error);
+    return (std::filesystem::path(DATA_DIRECTORY) / "catalog.db").string();
+}
 
 std::string field_value_to_string(const table::FieldValue& value) {
     if (std::holds_alternative<std::int64_t>(value)) {
@@ -434,9 +443,9 @@ std::vector<std::string> split_sql_statements(const std::string& sql) {
 }  // namespace
 
 DatabaseServer::DatabaseServer()
-    : catalog_("database_catalog.db"),
+    : catalog_(catalog_file_name()),
       parser_(),
-      executor_(catalog_) {}
+      executor_(catalog_, DATA_DIRECTORY) {}
 
 QueryResponse DatabaseServer::execute_query(const std::string& sql) {
     const auto started_at = std::chrono::steady_clock::now();

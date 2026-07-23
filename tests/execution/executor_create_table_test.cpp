@@ -132,6 +132,43 @@ int main() {
         assert(!string_primary_result.error_message.empty());
     }
 
+    {
+        const std::filesystem::path data_directory = "executor_create_table_test_data";
+        const std::filesystem::path table_directory = data_directory / "organized_users";
+        std::filesystem::remove_all(data_directory);
+
+        db::catalog::Catalog organized_catalog;
+        db::execution::Executor organized_executor(
+            organized_catalog,
+            data_directory.string()
+        );
+
+        const db::execution::ExecutionResult create_result = organized_executor.execute(
+            parser.parse(
+                "CREATE TABLE organized_users "
+                "(id INTEGER PRIMARY KEY, age INTEGER);"
+            )
+        );
+        assert(create_result.success);
+
+        const db::execution::ExecutionResult create_index_result = organized_executor.execute(
+            parser.parse("CREATE INDEX organized_users_age_idx ON organized_users (age);")
+        );
+        assert(create_index_result.success);
+
+        const auto definition = organized_catalog.find_table_definition("organized_users");
+        assert(definition.has_value());
+        assert(definition->heap_file_name == (table_directory / "heap.db").string());
+        assert(definition->indexes[0].file_name == (table_directory / "primary_index.db").string());
+        assert(definition->indexes[1].file_name ==
+               (table_directory / "organized_users_age_idx.db").string());
+        assert(std::filesystem::exists(table_directory / "heap.db"));
+        assert(std::filesystem::exists(table_directory / "primary_index.db"));
+        assert(std::filesystem::exists(table_directory / "organized_users_age_idx.db"));
+
+        std::filesystem::remove_all(data_directory);
+    }
+
     std::filesystem::remove(users_heap_file_name);
     std::filesystem::remove(users_primary_index_file_name);
     std::filesystem::remove(citizens_heap_file_name);

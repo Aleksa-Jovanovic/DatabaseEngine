@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <filesystem>
 #include <limits>
 #include <optional>
 #include <utility>
@@ -1027,11 +1028,48 @@ catalog::ColumnType to_catalog_column_type(sql::SqlTypeName type) {
     return catalog::ColumnType::String;
 }
 
-std::string heap_file_name_for_table(const std::string& table_name) {
+std::filesystem::path table_directory(
+    const std::string& data_directory,
+    const std::string& table_name
+) {
+    return std::filesystem::path(data_directory) / table_name;
+}
+
+bool ensure_table_directory(
+    const std::string& data_directory,
+    const std::string& table_name
+) {
+    if (data_directory.empty()) {
+        return true;
+    }
+
+    std::error_code error;
+    std::filesystem::create_directories(
+        table_directory(data_directory, table_name),
+        error
+    );
+    return !error;
+}
+
+std::string heap_file_name_for_table(
+    const std::string& data_directory,
+    const std::string& table_name
+) {
+    if (!data_directory.empty()) {
+        return (table_directory(data_directory, table_name) / "heap.db").string();
+    }
+
     return table_name + "_heap.db";
 }
 
-std::string primary_index_file_name_for_table(const std::string& table_name) {
+std::string primary_index_file_name_for_table(
+    const std::string& data_directory,
+    const std::string& table_name
+) {
+    if (!data_directory.empty()) {
+        return (table_directory(data_directory, table_name) / "primary_index.db").string();
+    }
+
     return table_name + "_primary_index.db";
 }
 
@@ -1040,9 +1078,14 @@ std::string primary_index_name_for_table(const std::string& table_name) {
 }
 
 std::string secondary_index_file_name_for_index(
+    const std::string& data_directory,
     const std::string& table_name,
     const std::string& index_name
 ) {
+    if (!data_directory.empty()) {
+        return (table_directory(data_directory, table_name) / (index_name + ".db")).string();
+    }
+
     return table_name + "_" + index_name + ".db";
 }
 
@@ -1059,7 +1102,8 @@ std::optional<sql::ColumnDefinitionNode> find_primary_key_column(
 }
 
 catalog::TableDefinition build_table_definition_from_create(
-    const sql::CreateTableStatement& create_table_statement
+    const sql::CreateTableStatement& create_table_statement,
+    const std::string& data_directory
 ) {
     catalog::Schema schema;
 
@@ -1077,13 +1121,16 @@ catalog::TableDefinition build_table_definition_from_create(
     return catalog::TableDefinition{
         create_table_statement.table_name,
         schema,
-        create_table_statement.table_name + "_heap.db",
+        heap_file_name_for_table(data_directory, create_table_statement.table_name),
         {
             catalog::IndexDefinition{
                 create_table_statement.table_name + "_pkey",
                 create_table_statement.table_name,
                 primary_key_column->name,
-                create_table_statement.table_name + "_primary_index.db",
+                primary_index_file_name_for_table(
+                    data_directory,
+                    create_table_statement.table_name
+                ),
                 true,
                 true
             }
@@ -1093,8 +1140,9 @@ catalog::TableDefinition build_table_definition_from_create(
 
 } // namespace
 
-Executor::Executor(catalog::Catalog& catalog)
-    : catalog_(catalog) {}
+Executor::Executor(catalog::Catalog& catalog, std::string data_directory)
+    : catalog_(catalog),
+      data_directory_(std::move(data_directory)) {}
 
 ExecutionResult Executor::execute(const sql::Statement& statement) {
     if (std::holds_alternative<sql::SelectStatement>(statement)) {
@@ -1544,10 +1592,23 @@ ExecutionResult Executor::execute_create_table(
         };
     }
 
-    const catalog::TableDefinition table_definition =
-        build_table_definition_from_create(create_table_statement);
+    if (!ensure_table_directory(data_directory_, create_table_statement.table_name)) {
+        return ExecutionResult{false, "Failed to create table data directory", {}, {}, 0};
+    }
+
+    const catalog::TableDefinition table_definition = build_table_definition_from_create(
+        create_table_statement,
+        data_directory_
+    );
 
     if (!catalog_.create_table(table_definition)) {
+        if (!data_directory_.empty()) {
+            std::error_code error;
+            std::filesystem::remove(
+                table_directory(data_directory_, create_table_statement.table_name),
+                error
+            );
+        }
         return ExecutionResult{false, "CREATE TABLE failed validation", {}, {}, 0};
     }
 
@@ -1602,6 +1663,7 @@ ExecutionResult Executor::execute_create_index(
         create_index_statement.table_name,
         create_index_statement.column_name,
         secondary_index_file_name_for_index(
+            data_directory_,
             create_index_statement.table_name,
             create_index_statement.index_name
         ),

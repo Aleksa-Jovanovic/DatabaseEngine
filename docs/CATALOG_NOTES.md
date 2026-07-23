@@ -88,6 +88,9 @@ Current validation:
 - the primary index column must match the schema primary-key column
 
 Current persistence behavior:
+- the production server stores its file-backed catalog at `data/catalog.db`
+- table definitions in that catalog point to table-local files under
+  `data/<table-name>/`
 - a file-backed catalog loads its metadata blob on construction
 - missing catalog file is treated as an empty catalog
 - `create_table(...)` now bootstraps the runtime table once before the catalog

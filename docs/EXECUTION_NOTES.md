@@ -68,6 +68,21 @@ The current `ExecutionResult` contains:
 - result rows
 - affected row count for write statements
 
+## Runtime data layout
+The database server stores persistent runtime data beneath `data/`:
+```text
+data/
+  catalog.db
+  <table-name>/
+    heap.db
+    primary_index.db
+    <secondary-index-name>.db
+```
+
+The catalog is database-wide, so it stays directly in `data/`. Heap and index
+files are scoped to the table they belong to, avoiding a growing collection of
+unrelated database files in the project root.
+
 ## Current CREATE TABLE behavior
 The current executor supports a first SQL-driven table creation path.
 

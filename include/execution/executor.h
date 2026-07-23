@@ -22,7 +22,9 @@ struct ExecutionResult {
 
 class Executor {
 public:
-    explicit Executor(catalog::Catalog& catalog);
+    // data_directory scopes new table files into data_directory/<table>/.
+    // An empty directory keeps the flat file layout used by low-level tests.
+    explicit Executor(catalog::Catalog& catalog, std::string data_directory = "");
 
     ExecutionResult execute(const sql::Statement& statement);
 
@@ -36,6 +38,7 @@ public:
 
 private:
     catalog::Catalog& catalog_;
+    std::string data_directory_;
 
     // Temporary one-entry table cache. A future TableManager should own opened
     // runtime table objects and handle invalidation outside the executor.

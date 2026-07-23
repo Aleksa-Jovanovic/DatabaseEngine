@@ -235,8 +235,8 @@ secondary index file currently has three separate page caches and three
 separate disk managers.
 
 Page ids are local to each physical file:
-- `users_heap.db` can have page `1`
-- `users_primary_index.db` can also have page `1`
+- `data/users/heap.db` can have page `1`
+- `data/users/primary_index.db` can also have page `1`
 - those are different pages because they belong to different files
 
 B+ tree files reserve page `0` for B+ tree metadata such as the root page id.
