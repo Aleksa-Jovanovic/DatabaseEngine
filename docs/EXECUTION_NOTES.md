@@ -238,6 +238,36 @@ The current table auto-increment counter is live runtime state. It is rebuilt
 by scanning existing rows when a table object opens, and it advances during
 successful inserts. The counter is not persisted in catalog metadata yet.
 
+### Insert performance path
+The server keeps the existing SQL syntax for bulk-looking workloads. A script
+such as:
+```sql
+INSERT INTO students (...) VALUES (...);
+INSERT INTO students (...) VALUES (...);
+```
+is still parsed as one `InsertStatement` per SQL statement. When consecutive
+inserts target the same table, however, the server sends them to the executor
+as one internal batch.
+
+The executor also keeps a temporary one-entry cache for the most recently
+opened table. Reusing that table avoids reopening the table and its indexes for
+each statement in a same-table workload.
+
+Together, batching and caching skip repeated per-statement work:
+- executor dispatch for every inserted row
+- catalog table-definition lookup for every inserted row
+- table and index opening/setup for every inserted row
+- response conversion and affected-row bookkeeping for every inserted row
+
+The engine still does the correctness-critical work for every row: it checks
+the primary key, fills generated/default values, builds the row, and writes it
+to the table. This is an execution-path optimization, not new SQL syntax and
+not a change to row-level insert semantics.
+
+Observed result: the 10,000-row `students` script ran in about 880 ms in the
+web demo after this work. A clean before/after baseline was not recorded, so
+no exact percentage improvement is claimed here.
+
 ## Current UPDATE behavior
 The current executor supports table-level `UPDATE` execution through scan-based
 row matching.
