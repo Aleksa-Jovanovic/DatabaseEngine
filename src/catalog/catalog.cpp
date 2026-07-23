@@ -48,6 +48,28 @@ bool remove_file_if_exists(const std::string& file_name) {
     return true;
 }
 
+void remove_empty_table_directory(const TableDefinition& table_definition) {
+    const std::filesystem::path table_directory =
+        std::filesystem::path(table_definition.heap_file_name).parent_path();
+
+    // Flat legacy/test file names have no table-local directory to remove.
+    if (table_directory.empty() || table_directory == ".") {
+        return;
+    }
+
+    for (const IndexDefinition& index_definition : table_definition.indexes) {
+        if (std::filesystem::path(index_definition.file_name).parent_path() !=
+            table_directory) {
+            return;
+        }
+    }
+
+    // Only remove the directory when it is empty. This is intentionally best
+    // effort so an unrelated file or filesystem error cannot undo the DROP.
+    std::error_code error;
+    std::filesystem::remove(table_directory, error);
+}
+
 bool remove_table_files(const TableDefinition& table_definition) {
     if (!remove_file_if_exists(table_definition.heap_file_name)) {
         return false;
@@ -59,6 +81,7 @@ bool remove_table_files(const TableDefinition& table_definition) {
         }
     }
 
+    remove_empty_table_directory(table_definition);
     return true;
 }
 

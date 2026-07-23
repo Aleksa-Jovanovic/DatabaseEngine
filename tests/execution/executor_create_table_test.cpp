@@ -166,6 +166,12 @@ int main() {
         assert(std::filesystem::exists(table_directory / "primary_index.db"));
         assert(std::filesystem::exists(table_directory / "organized_users_age_idx.db"));
 
+        const db::execution::ExecutionResult drop_result = organized_executor.execute(
+            parser.parse("DROP TABLE organized_users;")
+        );
+        assert(drop_result.success);
+        assert(!std::filesystem::exists(table_directory));
+
         std::filesystem::remove_all(data_directory);
     }
 

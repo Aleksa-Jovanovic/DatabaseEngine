@@ -100,6 +100,8 @@ Current persistence behavior:
 - if a save fails during `create_table(...)`, the in-memory append is rolled back
 - `drop_table(...)` removes the table definition and attempts to delete the
   heap file plus all index files listed in the catalog metadata
+- when those files share a table-local `data/<table-name>/` directory, drop
+  also removes that directory once it is empty
 - missing physical files are treated as acceptable during drop, but filesystem
   errors cause the drop to fail
 - `drop_table(...)` persists immediately for file-backed catalogs
