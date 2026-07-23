@@ -29,13 +29,17 @@
                     <button id="run-query-button" type="button">Run query</button>
                 </div>
 
-                <textarea id="sql-input" spellcheck="false">CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, age INTEGER, name STRING);</textarea>
+                <textarea id="sql-input" spellcheck="false"></textarea>
 
-                <div class="quick-actions">
-                    <button type="button" data-query="INSERT INTO users (age, name) VALUES (30, 'Alice');">Insert Alice</button>
-                    <button type="button" data-query="INSERT INTO users (age, name) VALUES (40, 'Bob');">Insert Bob</button>
-                    <button type="button" data-query="CREATE INDEX users_age_idx ON users (age);">Create age index</button>
-                    <button type="button" data-query="SELECT * FROM users WHERE age BETWEEN 30 AND 40;">Select range</button>
+                <div class="query-templates" aria-label="SQL command templates">
+                    <button type="button" data-template="CREATE TABLE table_name (&#10;id INTEGER PRIMARY KEY AUTOINCREMENT,&#10;name STRING&#10;);">Create table</button>
+                    <button type="button" data-template="INSERT INTO table_name (name) VALUES ('value');">Insert</button>
+                    <button type="button" data-template="SELECT * FROM table_name;">Select</button>
+                    <button type="button" data-template="UPDATE table_name SET column_name = 'value' WHERE id = 1;">Update</button>
+                    <button type="button" data-template="DELETE FROM table_name WHERE id = 1;">Delete</button>
+                    <button type="button" data-template="CREATE INDEX index_name ON table_name (column_name);">Create index</button>
+                    <button type="button" data-template="DROP TABLE table_name;">Drop table</button>
+                    <button type="button" data-template="DROP INDEX index_name;">Drop index</button>
                 </div>
             </section>
 
@@ -81,23 +85,61 @@
                     </div>
                 </div>
                 <div class="sql-help-grid">
-                    <code>CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, age INTEGER, name STRING);</code>
+                    <code>CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, age INTEGER, name STRING, active BOOLEAN, joined_on DATE);</code>
                     <code>DROP TABLE users;</code>
+                    <code>INSERT INTO users (age, name, active, joined_on) VALUES (30, 'Alice', TRUE, DATE '2026-07-23');</code>
+                    <code>INSERT INTO users VALUES (1, 30, 'Alice', TRUE, DATE '2026-07-23');</code>
                     <code>INSERT INTO users (age, name) VALUES (30, 'Alice');</code>
-                    <code>INSERT INTO users VALUES (1, 30, 'Alice');</code>
-                    <code>INSERT INTO users VALUES (30, 'Alice'); -- omit AUTOINCREMENT primary key</code>
                     <code>SELECT * FROM users;</code>
                     <code>SELECT id, name FROM users WHERE age &gt;= 30;</code>
                     <code>SELECT * FROM users WHERE age BETWEEN 30 AND 40;</code>
                     <code>SELECT * FROM users WHERE age = 30 AND name = 'Alice';</code>
                     <code>SELECT * FROM users WHERE age = 30 OR id = 1;</code>
-                    <code>UPDATE users SET name = 'Bob' WHERE id = 1;</code>
+                    <code>UPDATE users SET name = 'Bob', age = 31 WHERE id = 1;</code>
                     <code>UPDATE users SET age = 31;</code>
                     <code>DELETE FROM users WHERE id = 1;</code>
                     <code>DELETE FROM users;</code>
                     <code>CREATE INDEX users_age_idx ON users (age);</code>
                     <code>DROP INDEX users_age_idx;</code>
                 </div>
+
+                <section class="table-creation-guide" aria-labelledby="table-creation-guide-title">
+                    <div class="guide-heading">
+                        <div>
+                            <p class="panel-kicker">Table builder</p>
+                            <h3 id="table-creation-guide-title">CREATE TABLE guide</h3>
+                        </div>
+                        <span>One primary key required</span>
+                    </div>
+
+                    <div class="type-guide-grid">
+                        <article class="type-guide-card">
+                            <code>INTEGER</code>
+                            <p>Whole-number values. The current primary key must use this type.</p>
+                        </article>
+                        <article class="type-guide-card">
+                            <code>STRING</code>
+                            <p>Quoted text values, for example <code>'Alice'</code>.</p>
+                        </article>
+                        <article class="type-guide-card">
+                            <code>BOOLEAN</code>
+                            <p>Use the literals <code>TRUE</code> or <code>FALSE</code>.</p>
+                        </article>
+                        <article class="type-guide-card">
+                            <code>DATE</code>
+                            <p>Use a date literal such as <code>DATE '2026-07-23'</code>.</p>
+                        </article>
+                    </div>
+
+                    <div class="constraint-guide">
+                        <div>
+                            <span class="guide-label">Keywords</span>
+                            <code>PRIMARY KEY</code>
+                            <code>AUTOINCREMENT</code>
+                        </div>
+                        <p><code>PRIMARY KEY</code> is required exactly once. <code>AUTOINCREMENT</code> is optional and only valid on an <code>INTEGER PRIMARY KEY</code> column.</p>
+                    </div>
+                </section>
             </section>
         </section>
     </main>

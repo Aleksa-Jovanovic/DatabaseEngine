@@ -6,7 +6,7 @@ const affectedRows = document.querySelector("#affected-rows");
 const executionTime = document.querySelector("#execution-time");
 const resultTable = document.querySelector("#result-table");
 const catalogContent = document.querySelector("#catalog-content");
-const quickActionButtons = document.querySelectorAll("[data-query]");
+const templateButtons = document.querySelectorAll("[data-template]");
 
 function setStatus(label, state) {
     statusBadge.textContent = label;
@@ -87,7 +87,7 @@ function renderCatalog(catalog) {
     }
 
     const tablesHtml = tables
-        .map((table, tableIndex) => {
+        .map((table) => {
             const columns = table.columns || [];
             const indexes = table.indexes || [];
 
@@ -140,7 +140,7 @@ function renderCatalog(catalog) {
                 .join("");
 
             return `
-                <article class="catalog-table ${tableIndex === 0 ? "" : "collapsed"}">
+                <article class="catalog-table collapsed">
                     <button class="catalog-table-toggle" type="button" data-table-toggle>
                         <span class="catalog-table-name">${escapeHtml(table.name)}</span>
                         <span class="catalog-table-count">${columns.length} columns</span>
@@ -243,10 +243,20 @@ async function runQuery() {
 
 runButton.addEventListener("click", runQuery);
 
-quickActionButtons.forEach((button) => {
+templateButtons.forEach((button) => {
     button.addEventListener("click", () => {
-        sqlInput.value = button.dataset.query;
-        //runQuery();
+        const template = button.dataset.template;
+        const tableNameOffset = template.indexOf("table_name");
+
+        sqlInput.value = template;
+        sqlInput.focus();
+
+        if (tableNameOffset >= 0) {
+            sqlInput.setSelectionRange(
+                tableNameOffset,
+                tableNameOffset + "table_name".length
+            );
+        }
     });
 });
 
