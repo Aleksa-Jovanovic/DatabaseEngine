@@ -7,6 +7,7 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <variant>
@@ -460,11 +461,48 @@ QueryResponse DatabaseServer::execute_query(const std::string& sql) {
 
         QueryResponse final_response;
         std::size_t total_affected_rows = 0;
+        std::optional<sql::Statement> pending_statement;
+        std::size_t statement_index = 0;
 
-        for (const std::string& statement_sql : statements) {
-            const auto statement = parser_.parse(statement_sql);
-            QueryResponse response =
-                to_query_response(executor_.execute(statement));
+        while (statement_index < statements.size() || pending_statement.has_value()) {
+            sql::Statement statement =
+                pending_statement.has_value()
+                    ? std::move(pending_statement.value())
+                    : parser_.parse(statements[statement_index++]);
+            pending_statement.reset();
+
+            QueryResponse response;
+
+            if (std::holds_alternative<sql::InsertStatement>(statement)) {
+                const sql::InsertStatement& first_insert =
+                    std::get<sql::InsertStatement>(statement);
+                std::vector<sql::InsertStatement> insert_batch;
+                insert_batch.push_back(first_insert);
+
+                while (statement_index < statements.size()) {
+                    sql::Statement next_statement =
+                        parser_.parse(statements[statement_index++]);
+
+                    if (!std::holds_alternative<sql::InsertStatement>(next_statement)) {
+                        pending_statement = std::move(next_statement);
+                        break;
+                    }
+
+                    const sql::InsertStatement& next_insert =
+                        std::get<sql::InsertStatement>(next_statement);
+                    if (next_insert.table_name != first_insert.table_name) {
+                        pending_statement = std::move(next_statement);
+                        break;
+                    }
+
+                    insert_batch.push_back(next_insert);
+                }
+
+                response =
+                    to_query_response(executor_.execute_insert_batch(insert_batch));
+            } else {
+                response = to_query_response(executor_.execute(statement));
+            }
 
             total_affected_rows += response.affected_rows;
 

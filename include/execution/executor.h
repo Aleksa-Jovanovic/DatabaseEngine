@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstddef>
+#include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -24,8 +26,24 @@ public:
 
     ExecutionResult execute(const sql::Statement& statement);
 
+    // Execute many already-parsed INSERT statements for the same table through
+    // one executor path. This keeps the actual row writes the same, but avoids
+    // repeating per-statement overhead such as catalog lookups, table opening,
+    // executor dispatch, and response creation for every inserted row.
+    ExecutionResult execute_insert_batch(
+        const std::vector<sql::InsertStatement>& insert_statements
+    );
+
 private:
     catalog::Catalog& catalog_;
+
+    // Temporary one-entry table cache. A future TableManager should own opened
+    // runtime table objects and handle invalidation outside the executor.
+    std::string cached_table_name_;
+    std::unique_ptr<table::Table> cached_table_;
+
+    table::Table* open_cached_table(const std::string& table_name);
+    void clear_cached_table();
 
     ExecutionResult execute_create_table(const sql::CreateTableStatement& statement);
     ExecutionResult execute_drop_table(const sql::DropTableStatement& statement);

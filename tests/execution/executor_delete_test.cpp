@@ -1,6 +1,7 @@
 #include <cassert>
 #include <filesystem>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <variant>
 
@@ -160,6 +161,64 @@ int main() {
         assert(!delete_result.success);
         assert(!delete_result.error_message.empty());
         assert(delete_result.affected_rows == 0);
+    }
+
+    {
+        const std::string bulk_heap_file_name = "executor_delete_bulk_users_heap.db";
+        const std::string bulk_primary_index_file_name =
+            "executor_delete_bulk_users_primary_index.db";
+
+        std::filesystem::remove(bulk_heap_file_name);
+        std::filesystem::remove(bulk_primary_index_file_name);
+
+        db::catalog::TableDefinition bulk_users_table{
+            "bulk_users",
+            user_schema,
+            bulk_heap_file_name,
+            {
+                {
+                    "bulk_users_pkey",
+                    "bulk_users",
+                    "id",
+                    bulk_primary_index_file_name,
+                    true,
+                    true
+                }
+            }
+        };
+
+        db::catalog::Catalog bulk_catalog;
+        assert(bulk_catalog.create_table(bulk_users_table));
+
+        db::execution::Executor bulk_executor(bulk_catalog);
+
+        constexpr std::uint32_t row_count = 10000;
+        for (std::uint32_t id = 1; id <= row_count; ++id) {
+            std::ostringstream insert_sql;
+            insert_sql << "INSERT INTO bulk_users VALUES ("
+                       << id
+                       << ", 'User "
+                       << id
+                       << "', TRUE);";
+
+            assert(bulk_executor.execute(parser.parse(insert_sql.str())).success);
+        }
+
+        const db::execution::ExecutionResult delete_result =
+            bulk_executor.execute(parser.parse("DELETE FROM bulk_users;"));
+
+        assert(delete_result.success);
+        assert(delete_result.error_message.empty());
+        assert(delete_result.affected_rows == row_count);
+
+        const db::execution::ExecutionResult select_result =
+            bulk_executor.execute(parser.parse("SELECT * FROM bulk_users;"));
+
+        assert(select_result.success);
+        assert(select_result.rows.empty());
+
+        std::filesystem::remove(bulk_heap_file_name);
+        std::filesystem::remove(bulk_primary_index_file_name);
     }
 
     std::filesystem::remove(heap_file_name);

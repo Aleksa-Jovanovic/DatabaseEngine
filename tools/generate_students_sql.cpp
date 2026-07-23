@@ -3,7 +3,7 @@
 #include <string>
 
 int main() {
-    const std::string output_file_name = "students_10000.sql";
+    const std::string output_file_name = "tools/students_10000.sql";
     std::ofstream output(output_file_name);
 
     if (!output) {

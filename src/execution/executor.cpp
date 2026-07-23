@@ -1138,6 +1138,26 @@ ExecutionResult Executor::execute(const sql::Statement& statement) {
     };
 }
 
+table::Table* Executor::open_cached_table(const std::string& table_name) {
+    if (cached_table_ != nullptr && cached_table_name_ == table_name) {
+        return cached_table_.get();
+    }
+
+    cached_table_ = catalog_.open_table(table_name);
+    if (cached_table_ == nullptr) {
+        cached_table_name_.clear();
+        return nullptr;
+    }
+
+    cached_table_name_ = table_name;
+    return cached_table_.get();
+}
+
+void Executor::clear_cached_table() {
+    cached_table_.reset();
+    cached_table_name_.clear();
+}
+
 ExecutionResult Executor::execute_select(const sql::SelectStatement& select_statement) {
     const auto table_definition = 
         catalog_.find_table_definition(select_statement.table_name);
@@ -1164,7 +1184,7 @@ ExecutionResult Executor::execute_select(const sql::SelectStatement& select_stat
         };
     }
 
-    auto table = catalog_.open_table(select_statement.table_name);
+    table::Table* table = open_cached_table(select_statement.table_name);
     if (table == nullptr) {
         return ExecutionResult{
             false,
@@ -1211,75 +1231,105 @@ ExecutionResult Executor::execute_select(const sql::SelectStatement& select_stat
 ExecutionResult Executor::execute_insert(
     const sql::InsertStatement& insert_statement
 ) {
-    const auto table_definition =
-        catalog_.find_table_definition(insert_statement.table_name);
+    return execute_insert_batch({insert_statement});
+}
 
-    if (!table_definition.has_value()) {
-        return ExecutionResult{
-            false,
-            "Table does not exist: " + insert_statement.table_name,
-            {},
-            {},
-            0
-        };
+ExecutionResult Executor::execute_insert_batch(
+    const std::vector<sql::InsertStatement>& insert_statements
+) {
+    if (insert_statements.empty()) {
+        return ExecutionResult{true, "", {}, {}, 0};
     }
 
-    auto table = catalog_.open_table(insert_statement.table_name);
-    if (table == nullptr) {
-        return ExecutionResult{
-            false,
-            "Could not open table: " + insert_statement.table_name,
-            {},
-            {},
-            0
-        };
-    }
+    const std::string& table_name = insert_statements.front().table_name;
 
-    const bool primary_key_was_provided =
-        insert_provides_primary_key(table_definition.value(), insert_statement);
-
-    std::optional<std::uint32_t> generated_primary_key = std::nullopt;
-
-    if (!primary_key_was_provided) {
-        if (!primary_key_is_auto_increment(table_definition.value())) {
+    for (const sql::InsertStatement& insert_statement : insert_statements) {
+        if (insert_statement.table_name != table_name) {
             return ExecutionResult{
                 false,
-                "INSERT must provide a PRIMARY KEY value",
+                "INSERT batch cannot span multiple tables",
                 {},
                 {},
                 0
             };
         }
-
-        generated_primary_key = table->allocate_primary_key();
     }
 
-    const auto row =
-        build_row_from_insert(
-            table_definition.value(),
-            insert_statement,
-            generated_primary_key
-        );
+    const auto table_definition =
+        catalog_.find_table_definition(table_name);
 
-    if (!row.has_value()) {
+    if (!table_definition.has_value()) {
         return ExecutionResult{
             false,
-            "Could not build row from INSERT statement",
+            "Table does not exist: " + table_name,
             {},
             {},
             0
         };
     }
 
-    const auto row_id = table->insert(row.value());
-    if (!row_id.has_value()) {
+    table::Table* table = open_cached_table(table_name);
+    if (table == nullptr) {
         return ExecutionResult{
             false,
-            "INSERT failed",
+            "Could not open table: " + table_name,
             {},
             {},
             0
         };
+    }
+
+    std::size_t inserted_count = 0;
+
+    for (const sql::InsertStatement& insert_statement : insert_statements) {
+        const bool primary_key_was_provided =
+            insert_provides_primary_key(table_definition.value(), insert_statement);
+
+        std::optional<std::uint32_t> generated_primary_key = std::nullopt;
+
+        if (!primary_key_was_provided) {
+            if (!primary_key_is_auto_increment(table_definition.value())) {
+                return ExecutionResult{
+                    false,
+                    "INSERT must provide a PRIMARY KEY value",
+                    {},
+                    {},
+                    inserted_count
+                };
+            }
+
+            generated_primary_key = table->allocate_primary_key();
+        }
+
+        const auto row =
+            build_row_from_insert(
+                table_definition.value(),
+                insert_statement,
+                generated_primary_key
+            );
+
+        if (!row.has_value()) {
+            return ExecutionResult{
+                false,
+                "Could not build row from INSERT statement",
+                {},
+                {},
+                inserted_count
+            };
+        }
+
+        const auto row_id = table->insert(row.value());
+        if (!row_id.has_value()) {
+            return ExecutionResult{
+                false,
+                "INSERT failed",
+                {},
+                {},
+                inserted_count
+            };
+        }
+
+        ++inserted_count;
     }
 
     return ExecutionResult{
@@ -1287,7 +1337,7 @@ ExecutionResult Executor::execute_insert(
         "",
         {},
         {},
-        1
+        inserted_count
     };
 }
 
@@ -1327,7 +1377,7 @@ ExecutionResult Executor::execute_update(
         };
     }
 
-    auto table = catalog_.open_table(update_statement.table_name);
+    table::Table* table = open_cached_table(update_statement.table_name);
     if (table == nullptr) {
         return ExecutionResult{
             false,
@@ -1412,7 +1462,7 @@ ExecutionResult Executor::execute_delete(
         };
     }
 
-    auto table = catalog_.open_table(delete_statement.table_name);
+    table::Table* table = open_cached_table(delete_statement.table_name);
     if (table == nullptr) {
         return ExecutionResult{
             false,
@@ -1501,6 +1551,8 @@ ExecutionResult Executor::execute_create_table(
         return ExecutionResult{false, "CREATE TABLE failed validation", {}, {}, 0};
     }
 
+    clear_cached_table();
+
     return ExecutionResult{true, "", {}, {}, 0};
 }
 
@@ -1510,6 +1562,8 @@ ExecutionResult Executor::execute_drop_table(
     if (drop_table_statement.table_name.empty()) {
         return ExecutionResult{false, "Table name cannot be empty", {}, {}, 0};
     }
+
+    clear_cached_table();
 
     if (!catalog_.drop_table(drop_table_statement.table_name)) {
         return ExecutionResult{
@@ -1552,7 +1606,7 @@ ExecutionResult Executor::execute_create_index(
             create_index_statement.index_name
         ),
         false,
-        true
+        false
     };
 
     if (!catalog_.create_index(index_definition)) {
@@ -1565,16 +1619,22 @@ ExecutionResult Executor::execute_create_index(
         };
     }
 
-    auto table = catalog_.open_table(create_index_statement.table_name);
+    // Reopen from updated catalog metadata so the table sees the new index.
+    clear_cached_table();
+    table::Table* table = open_cached_table(create_index_statement.table_name);
     if (table == nullptr) {
         catalog_.drop_index(create_index_statement.index_name);
+        clear_cached_table();
         return ExecutionResult{false, "Failed to open table for index backfill", {}, {}, 0};
     }
 
     if (!table->backfill_secondary_index(create_index_statement.index_name)) {
         catalog_.drop_index(create_index_statement.index_name);
+        clear_cached_table();
         return ExecutionResult{false, "Failed to backfill secondary index", {}, {}, 0};
     }
+
+    clear_cached_table();
 
     return ExecutionResult{true, "", {}, {}, 0};
 }
@@ -1585,6 +1645,8 @@ ExecutionResult Executor::execute_drop_index(
     if (drop_index_statement.index_name.empty()) {
         return ExecutionResult{false, "Index name cannot be empty", {}, {}, 0};
     }
+
+    clear_cached_table();
 
     if (!catalog_.drop_index(drop_index_statement.index_name)) {
         return ExecutionResult{

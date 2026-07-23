@@ -115,7 +115,7 @@ int main() {
         assert(table_definition->indexes[1].column_name == "age");
         assert(table_definition->indexes[1].file_name == age_index_file_name);
         assert(!table_definition->indexes[1].is_primary);
-        assert(table_definition->indexes[1].is_unique);
+        assert(!table_definition->indexes[1].is_unique);
     }
 
     {
